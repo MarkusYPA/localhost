@@ -18,16 +18,28 @@ pub fn kevent(
     timeout: Option<Duration>,
 ) -> Result<i32, std::io::Error> {
     let timeout = timeout.map(|d| libc::timespec {
-        tv_sec: d.as_secs() as i64,
-        tv_nsec: d.subsec_nanos() as i64,
+        tv_sec: d.as_secs() as libc::time_t,
+        tv_nsec: d.subsec_nanos() as libc::c_long,
     });
+
+    let changep = if changelist.is_empty() {
+        std::ptr::null()
+    } else {
+        changelist.as_ptr()
+    };
+
+    let eventp = if eventlist.is_empty() {
+        std::ptr::null_mut()
+    } else {
+        eventlist.as_mut_ptr()
+    };
 
     let ret = unsafe {
         libc::kevent(
             kq,
-            changelist.as_ptr(),
+            changep,
             changelist.len() as i32,
-            eventlist.as_mut_ptr(),
+            eventp,
             eventlist.len() as i32,
             timeout.as_ref().map_or(std::ptr::null(), |t| t as *const _),
         )
