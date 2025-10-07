@@ -77,15 +77,14 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
                             println!("Client fd {} closed connection", fd);
                         }
                         Ok(n) => {
-                            let req = String::from_utf8_lossy(&buf[..n]);
-                            println!("Got request from fd {}:\n{}", fd, req);
-                            let body = b"Hello, world!";
-                            let resp = format!(
-                                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                                body.len(),
-                                String::from_utf8_lossy(body)
-                            );
-                            let _ = stream.write_all(resp.as_bytes());
+                            let request = crate::http::request::Request::from(&buf[..n]);
+                            println!("{:?}", request);
+
+                            let response = match crate::handler::find_route(&request, &config) {
+                                Some(route) => crate::handler::handle_request(&request, route),
+                                None => crate::http::response::Response::new(404, b"Not Found".to_vec()),
+                            };
+                            let _ = stream.write_all(&response.to_bytes());
                             // don't call libc::close(fd); Rust will close when stream drops
                         }
                         Err(e) => {

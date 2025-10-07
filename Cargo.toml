@@ -5,3 +5,5 @@ edition = "2024"
 
 [dependencies]
 libc = "0.2"
+mime_guess = "2.0"
+uuid = { version = "1.0", features = ["v4", "fast-rng", "macro-diagnostics"] }
