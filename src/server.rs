@@ -1,8 +1,9 @@
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::os::fd::{AsRawFd, FromRawFd};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
 
 use libc::{self, EV_ADD, EV_ENABLE, EV_EOF, EVFILT_READ};
 
@@ -10,6 +11,9 @@ use crate::config::ServerConfig;
 use crate::io::kqueue;
 use crate::session::SessionManager;
 use uuid::Uuid;
+
+const CONNECTION_TIMEOUT_SECS: u64 = 30;
+const MAX_CONNECTIONS: usize = 100;
 
 pub fn run(config: ServerConfig) -> std::io::Result<()> {
     // --- Setup listener ---
@@ -24,6 +28,9 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
 
     // --- Session Manager ---
     let session_manager = Arc::new(Mutex::new(SessionManager::new(3600))); // 1 hour timeout
+
+    // --- Connection activity tracking ---
+    let mut connections_activity: HashMap<i32, Instant> = HashMap::new();
 
     // --- Register listener fd for read events ---
     let lfd = listener.as_raw_fd();
@@ -40,7 +47,14 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
 
     // --- Event loop ---
     loop {
-        session_manager.lock().unwrap().clean_expired_sessions();
+        match session_manager.lock() {
+            Ok(mut guard) => guard.clean_expired_sessions(),
+            Err(poisoned) => {
+                eprintln!("Session manager lock was poisoned: {}. Recovering...", poisoned);
+                let mut guard = poisoned.into_inner();
+                guard.clean_expired_sessions();
+            }
+        }
 
         let mut events: [libc::kevent; 16] = unsafe { std::mem::zeroed() };
 
@@ -55,6 +69,12 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
             if fd == lfd {
                 // --- New connection ---
                 if let Ok((stream, addr)) = listener.accept() {
+                    if connections_activity.len() >= MAX_CONNECTIONS {
+                        println!("Max connections reached, rejecting new connection from {}", addr);
+                        drop(stream); // Close the connection
+                        continue;
+                    }
+
                     println!("Accepted connection from {}", addr);
                     stream.set_nonblocking(true)?;
                     let cfd = stream.as_raw_fd();
@@ -69,6 +89,9 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
                         udata: std::ptr::null_mut(),
                     };
                     kqueue::kevent(kq, std::slice::from_ref(&change), &mut [], None)?;
+
+                    // Add to activity tracking
+                    connections_activity.insert(cfd, Instant::now());
 
                     // Leak the stream so it stays open; we’ll recreate from fd on read
                     std::mem::forget(stream);
@@ -85,11 +108,18 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
                             println!("Client fd {} closed connection", fd);
                         }
                         Ok(n) => {
+                            connections_activity.insert(fd, Instant::now()); // Update activity time
                             let request = crate::http::request::Request::from(&buf[..n]);
                             println!("{:?}", request);
 
                             let response = {
-                                let mut session_manager_lock = session_manager.lock().unwrap();
+                                let mut session_manager_lock = match session_manager.lock() {
+                                    Ok(guard) => guard,
+                                    Err(poisoned) => {
+                                        eprintln!("Session manager lock was poisoned: {}. Recovering...", poisoned);
+                                        poisoned.into_inner()
+                                    }
+                                };
                                 let mut session_id: Option<Uuid> = None;
                                 if let Some(cookie_header) = request.cookies.get("session_id") {
                                     if let Ok(uuid) = Uuid::parse_str(cookie_header) {
@@ -113,7 +143,7 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
 
                                 match crate::handler::find_route(&request, &config) {
                                     Some(route) => {
-                                        let mut resp = crate::handler::handle_request(&request, route, &mut current_session);
+                                        let mut resp = crate::handler::handle_request(&request, route, &config, &mut current_session);
                                         if let Some(sid) = session_id {
                                             if request.cookies.get("session_id").is_none() {
                                                 resp.headers.insert("Set-Cookie".to_string(), format!("session_id={}; HttpOnly; Path=/", sid));
@@ -141,5 +171,17 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
                 }
             }
         }
+
+        // --- Check for connection timeouts ---
+        let now = Instant::now();
+        connections_activity.retain(|&fd, last_activity| {
+            if now.duration_since(*last_activity).as_secs() > CONNECTION_TIMEOUT_SECS {
+                println!("Client fd {} timed out, closing", fd);
+                unsafe { libc::close(fd); }
+                false // Remove from map
+            } else {
+                true // Keep in map
+            }
+        });
     }
 }

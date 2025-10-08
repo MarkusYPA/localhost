@@ -79,3 +79,45 @@ impl<'a> From<&'a [u8]> for Request {
         request
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_simple_get_request() {
+        let request_str = b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n";
+        let request = Request::from(request_str.as_ref());
+        assert_eq!(request.method, "GET");
+        assert_eq!(request.path, "/");
+        assert_eq!(request.headers.get("Host").unwrap(), "localhost");
+    }
+
+    #[test]
+    fn test_get_request_with_query_params() {
+        let request_str = b"GET /path?key1=value1&key2=value2 HTTP/1.1\r\nHost: localhost\r\n\r\n";
+        let request = Request::from(request_str.as_ref());
+        assert_eq!(request.method, "GET");
+        assert_eq!(request.path, "/path");
+        assert_eq!(request.query_params.get("key1").unwrap(), "value1");
+        assert_eq!(request.query_params.get("key2").unwrap(), "value2");
+    }
+
+    #[test]
+    fn test_post_request_with_body() {
+        let request_str = b"POST /path HTTP/1.1\r\nHost: localhost\r\nContent-Length: 13\r\n\r\nHello, world!";
+        let request = Request::from(request_str.as_ref());
+        assert_eq!(request.method, "POST");
+        assert_eq!(request.path, "/path");
+        assert_eq!(request.headers.get("Content-Length").unwrap(), "13");
+        assert_eq!(request.body, b"Hello, world!");
+    }
+
+    #[test]
+    fn test_request_with_cookies() {
+        let request_str = b"GET / HTTP/1.1\r\nHost: localhost\r\nCookie: key1=value1; key2=value2\r\n\r\n";
+        let request = Request::from(request_str.as_ref());
+        assert_eq!(request.cookies.get("key1").unwrap(), "value1");
+        assert_eq!(request.cookies.get("key2").unwrap(), "value2");
+    }
+}

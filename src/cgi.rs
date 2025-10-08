@@ -1,4 +1,4 @@
-use crate::config::Route;
+use crate::config::{Route, ServerConfig};
 use crate::http::request::Request;
 use crate::http::response::Response;
 use std::path::Path;
@@ -12,6 +12,7 @@ use crate::session::Session;
 pub fn handle_cgi(
     request: &Request,
     _route: &Route,
+    _config: &ServerConfig,
     cgi_path: &Path,
     cgi_executor: &str,
     _session: &mut Option<&mut Session>,

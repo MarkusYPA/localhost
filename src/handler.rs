@@ -20,18 +20,18 @@ pub fn find_route<'a>(request: &Request, config: &'a ServerConfig) -> Option<&'a
     best_match
 }
 
-pub fn handle_request(request: &Request, route: &Route, session: &mut Option<&mut Session>) -> Response {
+pub fn handle_request(request: &Request, route: &Route, config: &ServerConfig, session: &mut Option<&mut Session>) -> Response {
     if !route.methods.contains(&request.method) {
         return Response::new(405, b"Method Not Allowed".to_vec());
     }
 
     match request.method.as_str() {
-        "GET" => handle_get(request, route, session),
+        "GET" => handle_get(request, route, config, session),
         _ => Response::new(501, b"Not Implemented".to_vec()),
     }
 }
 
-fn handle_get(request: &Request, route: &Route, session: &mut Option<&mut Session>) -> Response {
+fn handle_get(request: &Request, route: &Route, config: &ServerConfig, session: &mut Option<&mut Session>) -> Response {
     if let Some(s) = session {
         let count = s.data.get("count").cloned().unwrap_or_else(|| "0".to_string());
         let new_count = count.parse::<i32>().unwrap_or(0) + 1;
@@ -39,7 +39,10 @@ fn handle_get(request: &Request, route: &Route, session: &mut Option<&mut Sessio
         println!("Session count: {}", new_count);
     }
 
-    let relative_path = request.path.strip_prefix(&route.path).unwrap();
+    let relative_path = match request.path.strip_prefix(&route.path) {
+        Some(path) => path,
+        None => return Response::new(500, b"Internal Server Error".to_vec()),
+    };
     let relative_path = relative_path.strip_prefix('/').unwrap_or(relative_path);
     let path = Path::new(&route.root).join(relative_path);
     println!("handle_get: path = {:?}", path);
@@ -62,7 +65,7 @@ fn handle_get(request: &Request, route: &Route, session: &mut Option<&mut Sessio
             println!("handle_get: file extension = {}", ext_str);
             if let Some(cgi_executor) = route.cgi_map.get(&ext_str) {
                 println!("handle_get: CGI executor found = {}", cgi_executor);
-                return handle_cgi(request, route, &path, cgi_executor, session);
+                return handle_cgi(request, route, config, &path, cgi_executor, session);
             } else {
                 println!("handle_get: No CGI executor found for extension {:?}", ext);
                 return serve_file(&path);
@@ -74,7 +77,23 @@ fn handle_get(request: &Request, route: &Route, session: &mut Option<&mut Sessio
     }
 
     println!("handle_get: 404 Not Found");
-    Response::new(404, b"Not Found".to_vec())
+    if let Some(error_page_path_str) = config.error_pages.get(&404) {
+        let current_dir = match std::env::current_dir() {
+            Ok(dir) => dir,
+            Err(_) => return Response::new(500, b"Internal Server Error".to_vec()),
+        };
+        let error_page_path = current_dir.join(error_page_path_str.strip_prefix('/').unwrap_or(error_page_path_str));
+        match fs::read(&error_page_path) {
+            Ok(body) => {
+                let mut response = Response::new(404, body);
+                response.headers.insert("Content-Type".to_string(), "text/html".to_string());
+                response
+            }
+            Err(_) => Response::new(404, b"Not Found".to_vec()),
+        }
+    } else {
+        Response::new(404, b"Not Found".to_vec())
+    }
 }
 
 fn serve_file(path: &Path) -> Response {
