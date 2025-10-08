@@ -2,11 +2,14 @@ use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::os::fd::{AsRawFd, FromRawFd};
 use std::time::Duration;
+use std::sync::{Arc, Mutex};
 
 use libc::{self, EV_ADD, EV_ENABLE, EV_EOF, EVFILT_READ};
 
 use crate::config::ServerConfig;
-use crate::io::kqueue; // your wrapper module
+use crate::io::kqueue;
+use crate::session::SessionManager;
+use uuid::Uuid;
 
 pub fn run(config: ServerConfig) -> std::io::Result<()> {
     // --- Setup listener ---
@@ -18,6 +21,9 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
     // --- Create kqueue ---
     let kq = kqueue::kqueue()?;
     println!("Server initialized, waiting for events...");
+
+    // --- Session Manager ---
+    let session_manager = Arc::new(Mutex::new(SessionManager::new(3600))); // 1 hour timeout
 
     // --- Register listener fd for read events ---
     let lfd = listener.as_raw_fd();
@@ -34,6 +40,8 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
 
     // --- Event loop ---
     loop {
+        session_manager.lock().unwrap().clean_expired_sessions();
+
         let mut events: [libc::kevent; 16] = unsafe { std::mem::zeroed() };
 
         let nev = kqueue::kevent(kq, &[], &mut events, Some(Duration::from_secs(5)))?;
@@ -80,10 +88,43 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
                             let request = crate::http::request::Request::from(&buf[..n]);
                             println!("{:?}", request);
 
-                            let response = match crate::handler::find_route(&request, &config) {
-                                Some(route) => crate::handler::handle_request(&request, route),
-                                None => crate::http::response::Response::new(404, b"Not Found".to_vec()),
+                            let response = {
+                                let mut session_manager_lock = session_manager.lock().unwrap();
+                                let mut session_id: Option<Uuid> = None;
+                                if let Some(cookie_header) = request.cookies.get("session_id") {
+                                    if let Ok(uuid) = Uuid::parse_str(cookie_header) {
+                                        session_id = Some(uuid);
+                                    }
+                                }
+
+                                let mut current_session = if let Some(id) = session_id {
+                                    println!("Attempting to retrieve session: {}", id);
+                                    session_manager_lock.get_session(&id)
+                                } else {
+                                    None
+                                };
+
+                                if current_session.is_none() {
+                                    println!("No valid session found, creating a new one.");
+                                    let new_session = session_manager_lock.create_session();
+                                    session_id = Some(new_session.id);
+                                    current_session = session_manager_lock.get_session(&new_session.id);
+                                }
+
+                                match crate::handler::find_route(&request, &config) {
+                                    Some(route) => {
+                                        let mut resp = crate::handler::handle_request(&request, route, &mut current_session);
+                                        if let Some(sid) = session_id {
+                                            if request.cookies.get("session_id").is_none() {
+                                                resp.headers.insert("Set-Cookie".to_string(), format!("session_id={}; HttpOnly; Path=/", sid));
+                                            }
+                                        }
+                                        resp
+                                    },
+                                    None => crate::http::response::Response::new(404, b"Not Found".to_vec()),
+                                }
                             };
+
                             let _ = stream.write_all(&response.to_bytes());
                             // don't call libc::close(fd); Rust will close when stream drops
                         }

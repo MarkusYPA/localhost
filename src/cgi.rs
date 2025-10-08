@@ -7,11 +7,14 @@ use std::ffi::CString;
 use std::io::{Read, Write};
 use std::os::fd::FromRawFd;
 
+use crate::session::Session;
+
 pub fn handle_cgi(
     request: &Request,
     _route: &Route,
     cgi_path: &Path,
     cgi_executor: &str,
+    _session: &mut Option<&mut Session>,
 ) -> Response {
     let mut pipe_stdin = [0; 2];
     let mut pipe_stdout = [0; 2];

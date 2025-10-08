@@ -1,31 +1,31 @@
-   Compiling httpserver v0.1.0 (/Users/markus.amberla/Documents/rustprojects/httpserver)
-warning: unreachable statement
-  --> src/handler.rs:65:26
+warning: unused variable: `session`
+  --> src/cgi.rs:17:5
    |
-57 |                     return handle_cgi(request, route, &path, cgi_executor);
-   |                     ------------------------------------------------------ any code following this expression is unreachable
-...
-65 |             }            return serve_file(&path);
-   |                          ^^^^^^^^^^^^^^^^^^^^^^^^^ unreachable statement
+17 |     session: &mut Option<&mut Session>,
+   |     ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_session`
    |
-   = note: `#[warn(unreachable_code)]` on by default
+   = note: `#[warn(unused_variables)]` on by default
 
 warning: `httpserver` (bin "httpserver") generated 1 warning
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.40s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
      Running `target/debug/httpserver`
 ServerConfig { host: "127.0.0.1", ports: [8080], routes: [Route { path: "/", methods: ["GET", "POST"], root: "./www", index: "index.html", cgi_map: {}, autoindex: true }, Route { path: "/upload", methods: ["POST"], root: "/var/uploads", index: "", cgi_map: {}, autoindex: false }, Route { path: "/cgi-bin", methods: ["GET", "POST"], root: "./cgi-bin", index: "", cgi_map: {".py": "python3"}, autoindex: false }], error_pages: {404: "/errors/404.html"}, client_max_body_size: 1048576 }
 Current working directory: Ok("/Users/markus.amberla/Documents/rustprojects/httpserver")
 Server listening on 127.0.0.1:8080
 Server initialized, waiting for events...
-Accepted connection from 127.0.0.1:60935
+Accepted connection from 127.0.0.1:63420
 Registered client fd 5 for read events
-Request { method: "GET", path: "/", headers: {"Host": "127.0.0.1:8080", "Accept": "*/*", "User-Agent": "curl/8.7.1", "Cookie": "name=value; foo=bar"}, body: [], query_params: {}, cookies: {"foo": "bar", "name": "value"} }
+Request { method: "GET", path: "/", headers: {"Accept": "*/*", "Host": "127.0.0.1:8080", "User-Agent": "curl/8.7.1"}, body: [], query_params: {}, cookies: {} }
+No valid session found, creating a new one.
+Session count: 1
 handle_get: path = "./www/"
 handle_get: path is dir
 handle_get: index file found
-Accepted connection from 127.0.0.1:60940
+Accepted connection from 127.0.0.1:63422
 Registered client fd 5 for read events
-Request { method: "GET", path: "/", headers: {"User-Agent": "curl/8.7.1", "Host": "127.0.0.1:8080", "Accept": "*/*", "Cookie": "name=value; foo=bar"}, body: [], query_params: {}, cookies: {"foo": "bar", "name": "value"} }
+Request { method: "GET", path: "/", headers: {"Cookie": "session_id=8aee9b33-b095-429b-9744-da29428b055c", "User-Agent": "curl/8.7.1", "Accept": "*/*", "Host": "127.0.0.1:8080"}, body: [], query_params: {}, cookies: {"session_id": "8aee9b33-b095-429b-9744-da29428b055c"} }
+Attempting to retrieve session: 8aee9b33-b095-429b-9744-da29428b055c
+Session count: 2
 handle_get: path = "./www/"
 handle_get: path is dir
 handle_get: index file found
