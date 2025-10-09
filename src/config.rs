@@ -78,8 +78,10 @@ pub fn parse_config(config_content: &str) -> Result<ServerConfig, String> {
                 let mut cgi_map = HashMap::new();
                 let mut autoindex = false;
 
+                let mut route_ended_correctly = false;
                 while let Some(route_line) = lines.next() {
                     if route_line == "}" {
+                        route_ended_correctly = true;
                         break;
                     }
                     let route_parts: Vec<&str> = route_line.split_whitespace().collect();
@@ -98,6 +100,9 @@ pub fn parse_config(config_content: &str) -> Result<ServerConfig, String> {
                         }
                         _ => {}
                     }
+                }
+                if !route_ended_correctly {
+                    return Err(format!("Invalid route definition: missing '}}' for route {}", path));
                 }
                 routes.push(Route {
                     path,
@@ -119,4 +124,81 @@ pub fn parse_config(config_content: &str) -> Result<ServerConfig, String> {
         error_pages,
         client_max_body_size,
     })
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_simple_config() {
+        let config_str = r#"
+server {
+    host: 127.0.0.1
+    port: 8080
+    client_max_body_size: 1024
+}
+"#;
+        let config = parse_config(config_str).unwrap();
+        assert_eq!(config.host, "127.0.0.1");
+        assert_eq!(config.ports, vec![8080]);
+        assert_eq!(config.client_max_body_size, 1024);
+    }
+
+    #[test]
+    fn test_config_with_route() {
+        let config_str = r#"
+server {
+    host: 127.0.0.1
+    port: 8080
+    route / {
+        methods: GET POST
+        root: /var/www
+        index: index.html
+        autoindex: on
+    }
+}
+"#;
+        let config = parse_config(config_str).unwrap();
+        assert_eq!(config.routes.len(), 1);
+        let route = &config.routes[0];
+        assert_eq!(route.path, "/");
+        assert_eq!(route.methods, vec!["GET", "POST"]);
+        assert_eq!(route.root, "/var/www");
+        assert_eq!(route.index, "index.html");
+        assert!(route.autoindex);
+    }
+
+    #[test]
+    fn test_config_with_cgi() {
+        let config_str = r#"
+server {
+    host: 127.0.0.1
+    port: 8080
+    route /cgi-bin {
+        methods: GET POST
+        root: /var/cgi
+        cgi_extension: .py python3
+    }
+}
+"#;
+        let config = parse_config(config_str).unwrap();
+        assert_eq!(config.routes.len(), 1);
+        let route = &config.routes[0];
+        assert_eq!(route.path, "/cgi-bin");
+        assert_eq!(route.cgi_map.get(".py").unwrap(), "python3");
+    }
+
+    #[test]
+    fn test_invalid_config() {
+        let config_str = r#"
+server {
+    host: 127.0.0.1
+    port: not-a-number
+}
+"#;
+        let config = parse_config(config_str);
+        assert!(config.is_err());
+    }
 }

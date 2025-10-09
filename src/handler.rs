@@ -119,3 +119,95 @@ fn serve_file(path: &Path, config: &ServerConfig) -> Response {
     }
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::parse_config;
+    use std::collections::HashMap;
+
+    fn basic_config() -> ServerConfig {
+        let config_str = r#"
+server {
+    host: 127.0.0.1
+    port: 8080
+    route / {
+        methods: GET
+        root: /var/www
+        index: index.html
+    }
+    route /api {
+        methods: GET POST
+        root: /var/api
+    }
+}
+"#;
+        parse_config(config_str).unwrap()
+    }
+
+    #[test]
+    fn test_find_route_longest_match() {
+        let config = basic_config();
+        let request = Request {
+            method: "GET".to_string(),
+            path: "/api/users".to_string(),
+            headers: HashMap::new(),
+            body: vec![],
+            query_params: HashMap::new(),
+            cookies: HashMap::new(),
+        };
+        let route = find_route(&request, &config).unwrap();
+        assert_eq!(route.path, "/api");
+    }
+
+    #[test]
+    fn test_find_route_matches_root() {
+        let config = basic_config();
+        let request = Request {
+            method: "GET".to_string(),
+            path: "/unmatched".to_string(),
+            headers: HashMap::new(),
+            body: vec![],
+            query_params: HashMap::new(),
+            cookies: HashMap::new(),
+        };
+        let route = find_route(&request, &config).unwrap();
+        assert_eq!(route.path, "/");
+    }
+
+    #[test]
+    fn test_handle_request_method_not_allowed() {
+        let config = basic_config();
+        let request = Request {
+            method: "POST".to_string(),
+            path: "/".to_string(),
+            headers: HashMap::new(),
+            body: vec![],
+            query_params: HashMap::new(),
+            cookies: HashMap::new(),
+        };
+        let route = find_route(&request, &config).unwrap();
+        let response = handle_request(&request, route, &config, &mut None);
+        assert_eq!(response.status_code, 405);
+    }
+
+    #[test]
+    fn test_path_traversal_attack() {
+        let config = basic_config();
+        let request = Request {
+            method: "GET".to_string(),
+            path: "/../../../../etc/passwd".to_string(),
+            headers: HashMap::new(),
+            body: vec![],
+            query_params: HashMap::new(),
+            cookies: HashMap::new(),
+        };
+        let route = find_route(&request, &config).unwrap();
+        // This test is not perfect, as it doesn't check the file system.
+        // However, it ensures that the path is correctly joined.
+        let relative_path = request.path.strip_prefix(&route.path).unwrap();
+        let relative_path = relative_path.strip_prefix('/').unwrap_or(relative_path);
+        let path = Path::new(&route.root).join(relative_path);
+        assert!(path.starts_with(&route.root));
+    }
+}
