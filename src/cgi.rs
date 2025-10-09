@@ -9,23 +9,41 @@ use std::os::fd::FromRawFd;
 
 use crate::session::Session;
 
+fn to_cstring<S: AsRef<[u8]>>(s: S) -> Result<CString, Response> {
+    CString::new(s.as_ref()).map_err(|_| Response::new(500, b"Internal Server Error: Invalid CString".to_vec()))
+}
+
 pub fn handle_cgi(
+    request: &Request,
+    route: &Route,
+    config: &ServerConfig,
+    cgi_path: &Path,
+    cgi_executor: &str,
+    session: &mut Option<&mut Session>,
+) -> Response {
+    match handle_cgi_internal(request, route, config, cgi_path, cgi_executor, session) {
+        Ok(resp) => resp,
+        Err(resp) => resp,
+    }
+}
+
+fn handle_cgi_internal(
     request: &Request,
     _route: &Route,
     _config: &ServerConfig,
     cgi_path: &Path,
     cgi_executor: &str,
     _session: &mut Option<&mut Session>,
-) -> Response {
+) -> Result<Response, Response> {
     let mut pipe_stdin = [0; 2];
     let mut pipe_stdout = [0; 2];
 
     if unsafe { libc::pipe(pipe_stdin.as_mut_ptr()) } < 0 {
-        return Response::new(500, b"CGI Error: Failed to create stdin pipe".to_vec());
+        return Err(Response::new(500, b"CGI Error: Failed to create stdin pipe".to_vec()));
     }
     if unsafe { libc::pipe(pipe_stdout.as_mut_ptr()) } < 0 {
         unsafe { libc::close(pipe_stdin[0]); libc::close(pipe_stdin[1]); }
-        return Response::new(500, b"CGI Error: Failed to create stdout pipe".to_vec());
+        return Err(Response::new(500, b"CGI Error: Failed to create stdout pipe".to_vec()));
     }
 
     let pid = unsafe { libc::fork() };
@@ -35,7 +53,7 @@ pub fn handle_cgi(
             libc::close(pipe_stdin[0]); libc::close(pipe_stdin[1]);
             libc::close(pipe_stdout[0]); libc::close(pipe_stdout[1]);
         }
-        return Response::new(500, b"CGI Error: Failed to fork process".to_vec());
+        return Err(Response::new(500, b"CGI Error: Failed to fork process".to_vec()));
     } else if pid == 0 { // Child process
         println!("CGI Child process started, PID: {}", unsafe { libc::getpid() });
         unsafe {
@@ -47,26 +65,28 @@ pub fn handle_cgi(
             libc::dup2(pipe_stdout[1], libc::STDOUT_FILENO);
             libc::close(pipe_stdout[1]);
 
-            let cgi_path_c = CString::new(cgi_path.to_str().unwrap()).unwrap();
-            let _cgi_executor_c = CString::new(cgi_executor).unwrap();
+            let cgi_path_str = cgi_path.to_str().unwrap_or_default();
+            let cgi_path_c = to_cstring(cgi_path_str)?;
+            let cgi_executor_c = to_cstring(cgi_executor)?;
 
             let args = [
+                cgi_executor_c.as_ptr(),
                 cgi_path_c.as_ptr(),
                 std::ptr::null()
             ];
 
-            let path_info = CString::new(request.path.as_str()).unwrap();
-            let request_method = CString::new(request.method.as_str()).unwrap();
-            let query_string = CString::new(request.query_params.iter().map(|(k,v)| format!("{k}={v}")).collect::<Vec<String>>().join("&")).unwrap();
-            let content_type = CString::new(request.headers.get("Content-Type").unwrap_or(&"".to_string()).as_str()).unwrap();
-            let content_length = CString::new(request.body.len().to_string()).unwrap();
+            let path_info = to_cstring(request.path.as_bytes())?;
+            let request_method = to_cstring(request.method.as_bytes())?;
+            let query_string = to_cstring(request.query_params.iter().map(|(k,v)| format!("{k}={v}")).collect::<Vec<String>>().join("&").as_bytes())?;
+            let content_type = to_cstring(request.headers.get("Content-Type").map(|s| s.as_bytes()).unwrap_or_default())?;
+            let content_length = to_cstring(request.body.len().to_string().as_bytes())?;
 
             let mut env_vars = Vec::new();
-            env_vars.push(CString::new(format!("PATH_INFO={}", path_info.to_str().unwrap())).unwrap());
-            env_vars.push(CString::new(format!("REQUEST_METHOD={}", request_method.to_str().unwrap())).unwrap());
-            env_vars.push(CString::new(format!("QUERY_STRING={}", query_string.to_str().unwrap())).unwrap());
-            env_vars.push(CString::new(format!("CONTENT_TYPE={}", content_type.to_str().unwrap())).unwrap());
-            env_vars.push(CString::new(format!("CONTENT_LENGTH={}", content_length.to_str().unwrap())).unwrap());
+            env_vars.push(to_cstring(format!("PATH_INFO={}", path_info.to_str().unwrap_or_default()))?);
+            env_vars.push(to_cstring(format!("REQUEST_METHOD={}", request_method.to_str().unwrap_or_default()))?);
+            env_vars.push(to_cstring(format!("QUERY_STRING={}", query_string.to_str().unwrap_or_default()))?);
+            env_vars.push(to_cstring(format!("CONTENT_TYPE={}", content_type.to_str().unwrap_or_default()))?);
+            env_vars.push(to_cstring(format!("CONTENT_LENGTH={}", content_length.to_str().unwrap_or_default()))?);
 
             let mut env_ptrs: Vec<*const libc::c_char> = env_vars.iter().map(|c_str| c_str.as_ptr()).collect();
             env_ptrs.push(std::ptr::null());
@@ -127,7 +147,7 @@ pub fn handle_cgi(
             for (key, value) in headers {
                 response.headers.insert(key, value);
             }
-            response
+            Ok(response)
         }
     }
 }

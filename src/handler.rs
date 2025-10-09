@@ -6,6 +6,30 @@ use std::fs;
 use std::path::Path;
 use crate::cgi::handle_cgi;
 
+fn handle_error(status_code: u16, config: &ServerConfig) -> Response {
+    if let Some(error_page_path_str) = config.error_pages.get(&status_code) {
+        let current_dir = match std::env::current_dir() {
+            Ok(dir) => dir,
+            Err(_) => return Response::new(500, b"Internal Server Error".to_vec()),
+        };
+        let error_page_path = current_dir.join(error_page_path_str.strip_prefix('/').unwrap_or(error_page_path_str));
+        match fs::read(&error_page_path) {
+            Ok(body) => {
+                let mut response = Response::new(status_code, body);
+                response.headers.insert("Content-Type".to_string(), "text/html".to_string());
+                response
+            }
+            Err(_) => {
+                let reason_phrase = crate::http::status::reason_phrase(status_code);
+                Response::new(status_code, reason_phrase.as_bytes().to_vec())
+            }
+        }
+    } else {
+        let reason_phrase = crate::http::status::reason_phrase(status_code);
+        Response::new(status_code, reason_phrase.as_bytes().to_vec())
+    }
+}
+
 pub fn find_route<'a>(request: &Request, config: &'a ServerConfig) -> Option<&'a Route> {
     let mut best_match: Option<&'a Route> = None;
     let mut longest_path = 0;
@@ -22,12 +46,12 @@ pub fn find_route<'a>(request: &Request, config: &'a ServerConfig) -> Option<&'a
 
 pub fn handle_request(request: &Request, route: &Route, config: &ServerConfig, session: &mut Option<&mut Session>) -> Response {
     if !route.methods.contains(&request.method) {
-        return Response::new(405, b"Method Not Allowed".to_vec());
+        return handle_error(405, config);
     }
 
     match request.method.as_str() {
         "GET" => handle_get(request, route, config, session),
-        _ => Response::new(501, b"Not Implemented".to_vec()),
+        _ => handle_error(501, config),
     }
 }
 
@@ -41,7 +65,7 @@ fn handle_get(request: &Request, route: &Route, config: &ServerConfig, session: 
 
     let relative_path = match request.path.strip_prefix(&route.path) {
         Some(path) => path,
-        None => return Response::new(500, b"Internal Server Error".to_vec()),
+        None => return handle_error(500, config),
     };
     let relative_path = relative_path.strip_prefix('/').unwrap_or(relative_path);
     let path = Path::new(&route.root).join(relative_path);
@@ -52,51 +76,38 @@ fn handle_get(request: &Request, route: &Route, config: &ServerConfig, session: 
         let index_path = path.join(&route.index);
         if index_path.is_file() {
             println!("handle_get: index file found");
-            return serve_file(&index_path);
+            return serve_file(&index_path, config);
         }
         // TODO: Directory listing
-        return Response::new(403, b"Forbidden".to_vec());
+        return handle_error(403, config);
     }
 
     if path.is_file() {
         println!("handle_get: path is file");
         if let Some(ext) = path.extension() {
-            let ext_str = format!(".{}", ext.to_str().unwrap());
+            let ext_str = match ext.to_str() {
+                Some(s) => format!(".{}", s),
+                None => return handle_error(400, config),
+            };
             println!("handle_get: file extension = {}", ext_str);
             if let Some(cgi_executor) = route.cgi_map.get(&ext_str) {
                 println!("handle_get: CGI executor found = {}", cgi_executor);
                 return handle_cgi(request, route, config, &path, cgi_executor, session);
             } else {
                 println!("handle_get: No CGI executor found for extension {:?}", ext);
-                return serve_file(&path);
+                return serve_file(&path, config);
             }
         } else {
             println!("handle_get: No file extension found");
-            return serve_file(&path);
+            return serve_file(&path, config);
         }
     }
 
     println!("handle_get: 404 Not Found");
-    if let Some(error_page_path_str) = config.error_pages.get(&404) {
-        let current_dir = match std::env::current_dir() {
-            Ok(dir) => dir,
-            Err(_) => return Response::new(500, b"Internal Server Error".to_vec()),
-        };
-        let error_page_path = current_dir.join(error_page_path_str.strip_prefix('/').unwrap_or(error_page_path_str));
-        match fs::read(&error_page_path) {
-            Ok(body) => {
-                let mut response = Response::new(404, body);
-                response.headers.insert("Content-Type".to_string(), "text/html".to_string());
-                response
-            }
-            Err(_) => Response::new(404, b"Not Found".to_vec()),
-        }
-    } else {
-        Response::new(404, b"Not Found".to_vec())
-    }
+    handle_error(404, config)
 }
 
-fn serve_file(path: &Path) -> Response {
+fn serve_file(path: &Path, config: &ServerConfig) -> Response {
     match fs::read(path) {
         Ok(body) => {
             let mut response = Response::new(200, body);
@@ -104,7 +115,7 @@ fn serve_file(path: &Path) -> Response {
             response.headers.insert("Content-Type".to_string(), content_type.to_string());
             response
         }
-        Err(_) => Response::new(500, b"Internal Server Error".to_vec()),
+        Err(_) => handle_error(500, config),
     }
 }
 

@@ -21,12 +21,10 @@ impl Response {
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        let status_line = format!("HTTP/1.1 {} {}
-", self.status_code, self.status_text());
+        let status_line = format!("HTTP/1.1 {} {}\r\n", self.status_code, crate::http::status::reason_phrase(self.status_code));
         let mut headers = String::new();
         for (key, value) in &self.headers {
-            headers.push_str(&format!("{}: {}
-", key, value));
+            headers.push_str(&format!("{}: {}\r\n", key, value));
         }
 
         let mut response = Vec::new();
@@ -36,15 +34,5 @@ impl Response {
         response.extend_from_slice(&self.body);
 
         response
-    }
-
-    fn status_text(&self) -> &str {
-        match self.status_code {
-            200 => "OK",
-            404 => "Not Found",
-            405 => "Method Not Allowed",
-            501 => "Not Implemented",
-            _ => "Internal Server Error",
-        }
     }
 }

@@ -48,6 +48,21 @@ pub fn parse_config(config_content: &str) -> Result<ServerConfig, String> {
             "error_page_404:" => {
                 error_pages.insert(404, parts[1].to_string());
             }
+            "error_page_400:" => {
+                error_pages.insert(400, parts[1].to_string());
+            }
+            "error_page_403:" => {
+                error_pages.insert(403, parts[1].to_string());
+            }
+            "error_page_405:" => {
+                error_pages.insert(405, parts[1].to_string());
+            }
+            "error_page_413:" => {
+                error_pages.insert(413, parts[1].to_string());
+            }
+            "error_page_500:" => {
+                error_pages.insert(500, parts[1].to_string());
+            }
             "client_max_body_size:" => {
                 client_max_body_size = parts[1].parse().map_err(|_| "Invalid client_max_body_size".to_string())?;
             }
