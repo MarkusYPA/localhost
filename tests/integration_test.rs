@@ -46,3 +46,33 @@ fn test_404_not_found() {
     // Check the status code
     assert_eq!(resp.status(), 404);
 }
+
+#[test]
+fn test_serve_static_website() {
+    setup();
+
+    // Test the index.html file
+    let resp = reqwest::blocking::get("http://127.0.0.1:8081/site/").unwrap();
+    assert_eq!(resp.status(), 200);
+    let body = resp.text().unwrap();
+    assert!(body.contains("<h1>Welcome to the test website!</h1>"));
+
+    // Test the style.css file
+    let resp = reqwest::blocking::get("http://127.0.0.1:8081/site/style.css").unwrap();
+    assert_eq!(resp.status(), 200);
+    let body = resp.text().unwrap();
+    assert!(body.contains("background-color: #f0f0f0;"));
+
+    // Test the script.js file
+    let resp = reqwest::blocking::get("http://127.0.0.1:8081/site/script.js").unwrap();
+    assert_eq!(resp.status(), 200);
+    let body = resp.text().unwrap();
+    assert!(body.contains("console.log(\"Hello from script.js!\");"));
+
+    // Test the image.png file
+    let resp = reqwest::blocking::get("http://127.0.0.1:8081/site/image.png").unwrap();
+    assert_eq!(resp.status(), 200);
+    assert_eq!(resp.headers()["content-type"], "image/png");
+    let body = resp.text().unwrap();
+    assert_eq!(body, "placeholder image");
+}
