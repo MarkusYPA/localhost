@@ -44,6 +44,7 @@ impl SessionManager {
 
     pub fn clean_expired_sessions(&mut self) {
         let now = Instant::now();
-        self.sessions.retain(|_, session| now.duration_since(session.last_activity) < self.timeout);
+        self.sessions
+            .retain(|_, session| now.duration_since(session.last_activity) < self.timeout);
     }
 }

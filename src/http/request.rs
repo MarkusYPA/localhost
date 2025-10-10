@@ -23,7 +23,11 @@ impl<'a> From<&'a [u8]> for Request {
 
         let mut header_end = 0;
         for i in 0..buffer.len() - 3 {
-            if buffer[i] == b'\r' && buffer[i+1] == b'\n' && buffer[i+2] == b'\r' && buffer[i+3] == b'\n' {
+            if buffer[i] == b'\r'
+                && buffer[i + 1] == b'\n'
+                && buffer[i + 2] == b'\r'
+                && buffer[i + 3] == b'\n'
+            {
                 header_end = i + 4;
                 break;
             }
@@ -33,7 +37,7 @@ impl<'a> From<&'a [u8]> for Request {
         let mut lines = headers_str.lines();
 
         if let Some(request_line) = lines.next() {
-            let mut parts = request_line.trim().split_whitespace();
+            let mut parts = request_line.split_whitespace();
             request.method = parts.next().unwrap_or("").to_string();
             let full_path = parts.next().unwrap_or("").to_string();
             let mut path_parts = full_path.split('?');
@@ -42,7 +46,9 @@ impl<'a> From<&'a [u8]> for Request {
                 for pair in query.split('&') {
                     let mut key_value = pair.split('=');
                     if let (Some(key), Some(value)) = (key_value.next(), key_value.next()) {
-                        request.query_params.insert(key.to_string(), value.to_string());
+                        request
+                            .query_params
+                            .insert(key.to_string(), value.to_string());
                     }
                 }
             }
@@ -59,8 +65,12 @@ impl<'a> From<&'a [u8]> for Request {
                 if header_key == "Cookie" {
                     for cookie_pair in header_value.split(';') {
                         let mut cookie_parts = cookie_pair.trim().splitn(2, '=');
-                        if let (Some(cookie_name), Some(cookie_value)) = (cookie_parts.next(), cookie_parts.next()) {
-                            request.cookies.insert(cookie_name.to_string(), cookie_value.to_string());
+                        if let (Some(cookie_name), Some(cookie_value)) =
+                            (cookie_parts.next(), cookie_parts.next())
+                        {
+                            request
+                                .cookies
+                                .insert(cookie_name.to_string(), cookie_value.to_string());
                         }
                     }
                 }
@@ -105,7 +115,8 @@ mod tests {
 
     #[test]
     fn test_post_request_with_body() {
-        let request_str = b"POST /path HTTP/1.1\r\nHost: localhost\r\nContent-Length: 13\r\n\r\nHello, world!";
+        let request_str =
+            b"POST /path HTTP/1.1\r\nHost: localhost\r\nContent-Length: 13\r\n\r\nHello, world!";
         let request = Request::from(request_str.as_ref());
         assert_eq!(request.method, "POST");
         assert_eq!(request.path, "/path");
@@ -115,7 +126,8 @@ mod tests {
 
     #[test]
     fn test_request_with_cookies() {
-        let request_str = b"GET / HTTP/1.1\r\nHost: localhost\r\nCookie: key1=value1; key2=value2\r\n\r\n";
+        let request_str =
+            b"GET / HTTP/1.1\r\nHost: localhost\r\nCookie: key1=value1; key2=value2\r\n\r\n";
         let request = Request::from(request_str.as_ref());
         assert_eq!(request.cookies.get("key1").unwrap(), "value1");
         assert_eq!(request.cookies.get("key2").unwrap(), "value2");
