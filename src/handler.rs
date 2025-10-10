@@ -1,10 +1,10 @@
+use crate::cgi::handle_cgi;
 use crate::config::{Route, ServerConfig};
 use crate::http::request::Request;
 use crate::http::response::Response;
 use crate::session::Session;
 use std::fs;
 use std::path::Path;
-use crate::cgi::handle_cgi;
 
 fn handle_error(status_code: u16, config: &ServerConfig) -> Response {
     if let Some(error_page_path_str) = config.error_pages.get(&status_code) {
@@ -12,11 +12,17 @@ fn handle_error(status_code: u16, config: &ServerConfig) -> Response {
             Ok(dir) => dir,
             Err(_) => return Response::new(500, b"Internal Server Error".to_vec()),
         };
-        let error_page_path = current_dir.join(error_page_path_str.strip_prefix('/').unwrap_or(error_page_path_str));
+        let error_page_path = current_dir.join(
+            error_page_path_str
+                .strip_prefix('/')
+                .unwrap_or(error_page_path_str),
+        );
         match fs::read(&error_page_path) {
             Ok(body) => {
                 let mut response = Response::new(status_code, body);
-                response.headers.insert("Content-Type".to_string(), "text/html".to_string());
+                response
+                    .headers
+                    .insert("Content-Type".to_string(), "text/html".to_string());
                 response
             }
             Err(_) => {
@@ -44,7 +50,12 @@ pub fn find_route<'a>(request: &Request, config: &'a ServerConfig) -> Option<&'a
     best_match
 }
 
-pub fn handle_request(request: &Request, route: &Route, config: &ServerConfig, session: &mut Option<&mut Session>) -> Response {
+pub fn handle_request(
+    request: &Request,
+    route: &Route,
+    config: &ServerConfig,
+    session: &mut Option<&mut Session>,
+) -> Response {
     if !route.methods.contains(&request.method) {
         return handle_error(405, config);
     }
@@ -55,12 +66,21 @@ pub fn handle_request(request: &Request, route: &Route, config: &ServerConfig, s
     }
 }
 
-fn handle_get(request: &Request, route: &Route, config: &ServerConfig, session: &mut Option<&mut Session>) -> Response {
+fn handle_get(
+    request: &Request,
+    route: &Route,
+    config: &ServerConfig,
+    session: &mut Option<&mut Session>,
+) -> Response {
     if let Some(s) = session {
-        let count = s.data.get("count").cloned().unwrap_or_else(|| "0".to_string());
+        let count = s
+            .data
+            .get("count")
+            .cloned()
+            .unwrap_or_else(|| "0".to_string());
         let new_count = count.parse::<i32>().unwrap_or(0) + 1;
         s.data.insert("count".to_string(), new_count.to_string());
-        println!("Session count: {}", new_count);
+
     }
 
     let relative_path = match request.path.strip_prefix(&route.path) {
@@ -69,13 +89,13 @@ fn handle_get(request: &Request, route: &Route, config: &ServerConfig, session: 
     };
     let relative_path = relative_path.strip_prefix('/').unwrap_or(relative_path);
     let path = Path::new(&route.root).join(relative_path);
-    println!("handle_get: path = {:?}", path);
+
 
     if path.is_dir() {
-        println!("handle_get: path is dir");
+
         let index_path = path.join(&route.index);
         if index_path.is_file() {
-            println!("handle_get: index file found");
+
             return serve_file(&index_path, config);
         }
         // TODO: Directory listing
@@ -83,18 +103,18 @@ fn handle_get(request: &Request, route: &Route, config: &ServerConfig, session: 
     }
 
     if path.is_file() {
-        println!("handle_get: path is file");
+    
         if let Some(ext) = path.extension() {
             let ext_str = match ext.to_str() {
-                Some(s) => format!(".{}", s),
+                Some(s) => format!(".{s}"),
                 None => return handle_error(400, config),
             };
-            println!("handle_get: file extension = {}", ext_str);
+
             if let Some(cgi_executor) = route.cgi_map.get(&ext_str) {
-                println!("handle_get: CGI executor found = {}", cgi_executor);
+
                 return handle_cgi(request, route, config, &path, cgi_executor, session);
             } else {
-                println!("handle_get: No CGI executor found for extension {:?}", ext);
+                println!("handle_get: No CGI executor found for extension {ext:?}");
                 return serve_file(&path, config);
             }
         } else {
@@ -112,13 +132,14 @@ fn serve_file(path: &Path, config: &ServerConfig) -> Response {
         Ok(body) => {
             let mut response = Response::new(200, body);
             let content_type = mime_guess::from_path(path).first_or_octet_stream();
-            response.headers.insert("Content-Type".to_string(), content_type.to_string());
+            response
+                .headers
+                .insert("Content-Type".to_string(), content_type.to_string());
             response
         }
         Err(_) => handle_error(500, config),
     }
 }
-
 
 #[cfg(test)]
 mod tests {

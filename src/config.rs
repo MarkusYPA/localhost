@@ -20,7 +20,10 @@ pub struct Route {
 }
 
 pub fn parse_config(config_content: &str) -> Result<ServerConfig, String> {
-    let mut lines = config_content.lines().map(|s| s.trim()).filter(|s| !s.is_empty());
+    let mut lines = config_content
+        .lines()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
 
     if lines.next() != Some("server {") {
         return Err("Expected 'server {'".to_string());
@@ -64,11 +67,13 @@ pub fn parse_config(config_content: &str) -> Result<ServerConfig, String> {
                 error_pages.insert(500, parts[1].to_string());
             }
             "client_max_body_size:" => {
-                client_max_body_size = parts[1].parse().map_err(|_| "Invalid client_max_body_size".to_string())?;
+                client_max_body_size = parts[1]
+                    .parse()
+                    .map_err(|_| "Invalid client_max_body_size".to_string())?;
             }
             "route" => {
                 if parts.len() != 3 || parts[2] != "{" {
-                    return Err(format!("Invalid route definition: {}", line));
+                    return Err(format!("Invalid route definition: {line}"));
                 }
                 let path = parts[1].to_string();
 
@@ -79,7 +84,7 @@ pub fn parse_config(config_content: &str) -> Result<ServerConfig, String> {
                 let mut autoindex = false;
 
                 let mut route_ended_correctly = false;
-                while let Some(route_line) = lines.next() {
+                for route_line in lines.by_ref() {
                     if route_line == "}" {
                         route_ended_correctly = true;
                         break;
@@ -89,20 +94,25 @@ pub fn parse_config(config_content: &str) -> Result<ServerConfig, String> {
                         continue;
                     }
                     match route_parts[0] {
-                        "methods:" => methods = route_parts[1..].iter().map(|s| s.to_string()).collect(),
+                        "methods:" => {
+                            methods = route_parts[1..].iter().map(|s| s.to_string()).collect()
+                        }
                         "root:" => root = route_parts[1].to_string(),
                         "index:" => index = route_parts[1].to_string(),
                         "autoindex:" => autoindex = route_parts[1] == "on",
                         "cgi_extension:" => {
                             if route_parts.len() == 3 {
-                                cgi_map.insert(route_parts[1].to_string(), route_parts[2].to_string());
+                                cgi_map
+                                    .insert(route_parts[1].to_string(), route_parts[2].to_string());
                             }
                         }
                         _ => {}
                     }
                 }
                 if !route_ended_correctly {
-                    return Err(format!("Invalid route definition: missing '}}' for route {}", path));
+                    return Err(format!(
+                        "Invalid route definition: missing '}}' for route {path}"
+                    ));
                 }
                 routes.push(Route {
                     path,
@@ -125,7 +135,6 @@ pub fn parse_config(config_content: &str) -> Result<ServerConfig, String> {
         client_max_body_size,
     })
 }
-
 
 #[cfg(test)]
 mod tests {

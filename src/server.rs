@@ -1,11 +1,11 @@
+use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::os::fd::{AsRawFd, FromRawFd};
-use std::time::{Duration, Instant};
 use std::sync::{Arc, Mutex};
-use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
-use libc::{self, EV_ADD, EV_ENABLE, EV_EOF, EVFILT_READ};
+use libc::{self, EVFILT_READ, EV_ADD, EV_ENABLE, EV_EOF};
 
 use crate::config::ServerConfig;
 use crate::io::kqueue;
@@ -20,7 +20,7 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
     let addr = format!("{}:{}", config.host, config.ports[0]);
     let listener = TcpListener::bind(&addr)?;
     listener.set_nonblocking(true)?;
-    println!("Server listening on {}", addr);
+    println!("Server listening on {addr}");
 
     // --- Create kqueue ---
     let kq = kqueue::kqueue()?;
@@ -50,7 +50,7 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
         match session_manager.lock() {
             Ok(mut guard) => guard.clean_expired_sessions(),
             Err(poisoned) => {
-                eprintln!("Session manager lock was poisoned: {}. Recovering...", poisoned);
+                eprintln!("Session manager lock was poisoned: {poisoned}. Recovering...");
                 let mut guard = poisoned.into_inner();
                 guard.clean_expired_sessions();
             }
@@ -68,14 +68,14 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
 
             if fd == lfd {
                 // --- New connection ---
-                if let Ok((stream, addr)) = listener.accept() {
+                if let Ok((stream, _addr)) = listener.accept() {
                     if connections_activity.len() >= MAX_CONNECTIONS {
-                        println!("Max connections reached, rejecting new connection from {}", addr);
+                        println!("Max connections reached, rejecting new connection from {addr}");
                         drop(stream); // Close the connection
                         continue;
                     }
 
-                    println!("Accepted connection from {}", addr);
+                    println!("Accepted connection from {addr}");
                     stream.set_nonblocking(true)?;
                     let cfd = stream.as_raw_fd();
 
@@ -95,7 +95,7 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
 
                     // Leak the stream so it stays open; we’ll recreate from fd on read
                     std::mem::forget(stream);
-                    println!("Registered client fd {} for read events", cfd);
+
                 }
             } else if ev.filter == EVFILT_READ {
                 // --- Data available from client ---
@@ -105,18 +105,18 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
                     match stream.read(&mut buf) {
                         Ok(0) => {
                             // client closed, just drop stream
-                            println!("Client fd {} closed connection", fd);
+                            println!("Client fd {fd} closed connection");
                         }
                         Ok(n) => {
                             connections_activity.insert(fd, Instant::now()); // Update activity time
                             let request = crate::http::request::Request::from(&buf[..n]);
-                            println!("{:?}", request);
+
 
                             let response = {
                                 let mut session_manager_lock = match session_manager.lock() {
                                     Ok(guard) => guard,
                                     Err(poisoned) => {
-                                        eprintln!("Session manager lock was poisoned: {}. Recovering...", poisoned);
+                                        eprintln!("Session manager lock was poisoned: {poisoned}. Recovering...");
                                         poisoned.into_inner()
                                     }
                                 };
@@ -128,7 +128,7 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
                                 }
 
                                 let mut current_session = if let Some(id) = session_id {
-                                    println!("Attempting to retrieve session: {}", id);
+                                    println!("Attempting to retrieve session: {id}");
                                     session_manager_lock.get_session(&id)
                                 } else {
                                     None
@@ -138,20 +138,32 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
                                     println!("No valid session found, creating a new one.");
                                     let new_session = session_manager_lock.create_session();
                                     session_id = Some(new_session.id);
-                                    current_session = session_manager_lock.get_session(&new_session.id);
+                                    current_session =
+                                        session_manager_lock.get_session(&new_session.id);
                                 }
 
                                 match crate::handler::find_route(&request, &config) {
                                     Some(route) => {
-                                        let mut resp = crate::handler::handle_request(&request, route, &config, &mut current_session);
+                                        let mut resp = crate::handler::handle_request(
+                                            &request,
+                                            route,
+                                            &config,
+                                            &mut current_session,
+                                        );
                                         if let Some(sid) = session_id {
-                                            if request.cookies.get("session_id").is_none() {
-                                                resp.headers.insert("Set-Cookie".to_string(), format!("session_id={}; HttpOnly; Path=/", sid));
+                                            if !request.cookies.contains_key("session_id") {
+                                                resp.headers.insert(
+                                                    "Set-Cookie".to_string(),
+                                                    format!("session_id={sid}; HttpOnly; Path=/"),
+                                                );
                                             }
                                         }
                                         resp
-                                    },
-                                    None => crate::http::response::Response::new(404, b"Not Found".to_vec()),
+                                    }
+                                    None => crate::http::response::Response::new(
+                                        404,
+                                        b"Not Found".to_vec(),
+                                    ),
                                 }
                             };
 
@@ -159,13 +171,13 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
                             // don't call libc::close(fd); Rust will close when stream drops
                         }
                         Err(e) => {
-                            eprintln!("Read error on fd {}: {}", fd, e);
+                            eprintln!("Read error on fd {fd}: {e}");   
                             // don't call libc::close(fd)
                         }
                     } // stream dropped here, fd automatically closed
                 }
             } else if ev.flags & EV_EOF != 0 {
-                println!("EOF on fd {}, closing", fd);
+
                 unsafe {
                     libc::close(fd);
                 }
@@ -176,8 +188,10 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
         let now = Instant::now();
         connections_activity.retain(|&fd, last_activity| {
             if now.duration_since(*last_activity).as_secs() > CONNECTION_TIMEOUT_SECS {
-                println!("Client fd {} timed out, closing", fd);
-                unsafe { libc::close(fd); }
+                println!("Client fd {fd} timed out, closing");
+                unsafe {
+                    libc::close(fd);
+                }
                 false // Remove from map
             } else {
                 true // Keep in map

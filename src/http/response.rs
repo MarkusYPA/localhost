@@ -21,10 +21,14 @@ impl Response {
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        let status_line = format!("HTTP/1.1 {} {}\r\n", self.status_code, crate::http::status::reason_phrase(self.status_code));
+        let status_line = format!(
+            "HTTP/1.1 {} {}\r\n",
+            self.status_code,
+            crate::http::status::reason_phrase(self.status_code)
+        );
         let mut headers = String::new();
         for (key, value) in &self.headers {
-            headers.push_str(&format!("{}: {}\r\n", key, value));
+            headers.push_str(&format!("{key}: {value}\r\n"));
         }
 
         let mut response = Vec::new();

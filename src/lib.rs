@@ -6,10 +6,10 @@ pub mod io;
 pub mod server;
 pub mod session;
 
-pub fn run() {
-    let config_content = std::fs::read_to_string("server.conf").expect("Should have been able to read the file");
-    let config = config::parse_config(&config_content).unwrap();
-    if let Err(e) = server::run(config) {
-        eprintln!("Error: {}", e);
-    }
+pub fn run() -> Result<(), Box<dyn std::error::Error>> {
+    let config_content = std::fs::read_to_string("server.conf")
+        .map_err(|e| format!("Failed to read server.conf: {e}"))?;
+    let config = config::parse_config(&config_content)
+        .map_err(|e| format!("Failed to parse server.conf: {e}"))?;
+    server::run(config).map_err(|e| e.into())
 }

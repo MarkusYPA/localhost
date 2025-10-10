@@ -1,3 +1,6 @@
 fn main() {
-    http_server::run();
+    if let Err(e) = http_server::run() {
+        eprintln!("Error: {}", e);
+        std::process::exit(1);
+    }
 }

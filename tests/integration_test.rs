@@ -1,15 +1,18 @@
-use std::thread;
-use std::time::Duration;
 use http_server;
 use lazy_static::lazy_static;
 use std::sync::Once;
+use std::thread;
+use std::time::Duration;
 
 static START: Once = Once::new();
 
 lazy_static! {
     static ref SERVER_THREAD: thread::JoinHandle<()> = {
         thread::spawn(|| {
-            http_server::run();
+            if let Err(e) = http_server::run() {
+                eprintln!("Server error: {}", e);
+                std::process::exit(1);
+            }
         })
     };
 }
@@ -34,7 +37,10 @@ fn test_get_index() {
 
     // Check the body
     let body = resp.text().unwrap();
-    assert_eq!(body, "<html><body><h1>Hello from index.html!</h1></body></html>");
+    assert_eq!(
+        body,
+        "<html><body><h1>Hello from index.html!</h1></body></html>"
+    );
 }
 
 #[test]
