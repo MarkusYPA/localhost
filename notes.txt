@@ -1,0 +1,4 @@
+- It was necssasry to run this for the memory leak tests to work
+rustup component add rust-src --toolchain nightly-aarch64-apple-darwin
+
+- Should the static website include a favicon?
