@@ -3,11 +3,15 @@ use crate::http::request::Request;
 use crate::http::response::Response;
 use std::collections::HashMap;
 use std::ffi::CString;
+use std::io::{Read, Write};
 use std::os::fd::FromRawFd;
 use std::path::Path;
 
 use crate::session::Session;
 
+/// Converts a Rust string slice to a CString, handling potential null bytes.
+/// Returns a `Result` which is an `Err` containing a 500 Internal Server Error
+/// response if the conversion fails.
 fn to_cstring<S: AsRef<[u8]>>(s: S) -> Result<CString, Response> {
     CString::new(s.as_ref())
         .map_err(|_| Response::new(500, b"Internal Server Error: Invalid CString".to_vec()))
@@ -27,6 +31,10 @@ pub fn handle_cgi(
     }
 }
 
+/// Handles the execution of a CGI script.
+///
+/// This function sets up pipes for inter-process communication, forks a new process,
+/// and executes the CGI script in the child process while the parent handles I/O.
 fn handle_cgi_internal(
     request: &Request,
     _route: &Route,
@@ -35,17 +43,23 @@ fn handle_cgi_internal(
     cgi_executor: &str,
     _session: &mut Option<&mut Session>,
 ) -> Result<Response, Response> {
+    // Create pipes for stdin and stdout communication with the CGI script.
+    // pipe_stdin[0] is read end, pipe_stdin[1] is write end.
+    // pipe_stdout[0] is read end, pipe_stdout[1] is write end.
     let mut pipe_stdin = [0; 2];
     let mut pipe_stdout = [0; 2];
 
+    // Create stdin pipe for the CGI process
     if unsafe { libc::pipe(pipe_stdin.as_mut_ptr()) } < 0 {
         return Err(Response::new(
             500,
             b"CGI Error: Failed to create stdin pipe".to_vec(),
         ));
     }
+    // Create stdout pipe for the CGI process
     if unsafe { libc::pipe(pipe_stdout.as_mut_ptr()) } < 0 {
         unsafe {
+            // Close previously created stdin pipes if stdout pipe creation fails
             libc::close(pipe_stdin[0]);
             libc::close(pipe_stdin[1]);
         }
@@ -55,9 +69,11 @@ fn handle_cgi_internal(
         ));
     }
 
+    // Fork a new process. pid will be 0 in the child, >0 in the parent (child's PID), and -1 on error.
     let pid = unsafe { libc::fork() };
 
     if pid < 0 {
+        // Fork failed, close all pipe file descriptors
         unsafe {
             libc::close(pipe_stdin[0]);
             libc::close(pipe_stdin[1]);
@@ -69,27 +85,32 @@ fn handle_cgi_internal(
             b"CGI Error: Failed to fork process".to_vec(),
         ))
     } else if pid == 0 {
-        // Child process
+        // Child process: This is where the CGI script will be executed.
 
         unsafe {
-            libc::close(pipe_stdin[1]); // Close write end of stdin pipe
+            // Close the write end of the stdin pipe and redirect the read end to STDIN
+            libc::close(pipe_stdin[1]);
             libc::dup2(pipe_stdin[0], libc::STDIN_FILENO);
             libc::close(pipe_stdin[0]);
 
-            libc::close(pipe_stdout[0]); // Close read end of stdout pipe
+            // Close the read end of the stdout pipe and redirect the write end to STDOUT
+            libc::close(pipe_stdout[0]);
             libc::dup2(pipe_stdout[1], libc::STDOUT_FILENO);
             libc::close(pipe_stdout[1]);
 
+            // Prepare CGI script path and executor as CStrings
             let cgi_path_str = cgi_path.to_str().unwrap_or_default();
             let cgi_path_c = to_cstring(cgi_path_str)?;
             let cgi_executor_c = to_cstring(cgi_executor)?;
 
+            // Arguments for execve: first is the executor, second is the script path, then null
             let args = [
                 cgi_executor_c.as_ptr(),
                 cgi_path_c.as_ptr(),
                 std::ptr::null(),
             ];
 
+            // Prepare environment variables for the CGI script
             let path_info = to_cstring(request.path.as_bytes())?;
             let request_method = to_cstring(request.method.as_bytes())?;
             let query_string = to_cstring(
@@ -132,44 +153,58 @@ fn handle_cgi_internal(
                 content_length.to_str().unwrap_or_default()
             ))?);
 
+            // Convert environment variables to a suitable format for execve
             let mut env_ptrs: Vec<*const libc::c_char> =
                 env_vars.iter().map(|c_str| c_str.as_ptr()).collect();
-            env_ptrs.push(std::ptr::null());
+            env_ptrs.push(std::ptr::null()); // execve expects a null-terminated array
 
+            // Execute the CGI script. If this call succeeds, the child process will be replaced
+            // by the CGI script. If it returns, an error occurred.
             libc::execve(cgi_path_c.as_ptr(), args.as_ptr(), env_ptrs.as_ptr());
-            // If execve returns, an error occurred
+            // If execve returns, an error occurred, so exit the child process.
             libc::_exit(1);
         }
     } else {
-        // Parent process
+        // Parent process: This process manages the child CGI script.
 
         unsafe {
-            libc::close(pipe_stdin[0]); // Close read end of stdin pipe
-            libc::close(pipe_stdout[1]); // Close write end of stdout pipe
+            // Close the unused ends of the pipes in the parent process
+            libc::close(pipe_stdin[0]);
+            libc::close(pipe_stdout[1]);
 
-            let stdin_writer = std::fs::File::from_raw_fd(pipe_stdin[1]);
-            let stdout_reader = std::fs::File::from_raw_fd(pipe_stdout[0]);
+            // Create Rust File objects from the raw file descriptors for easier I/O
+            let mut stdin_writer = std::fs::File::from_raw_fd(pipe_stdin[1]);
+            let mut stdout_reader = std::fs::File::from_raw_fd(pipe_stdout[0]);
 
-            // Write request body to CGI stdin
+            // Write the request body to the CGI script's stdin
+            // Error handling for write operation
+            if let Err(e) = stdin_writer.write_all(&request.body) {
+                // Log error, but don't fail the entire request yet
+                eprintln!("CGI Parent: Error writing to stdin pipe: {e}");
+            }
+            drop(stdin_writer); // Close stdin pipe for CGI, signaling EOF to the child
 
-            drop(stdin_writer); // Close stdin pipe for CGI
-
-            // Read CGI stdout
-            let cgi_output = Vec::new();
-
+            // Read the CGI script's stdout
+            let mut cgi_output = Vec::new();
+            // Error handling for read operation
+            if let Err(e) = stdout_reader.read_to_end(&mut cgi_output) {
+                // Log error, but don't fail the entire request yet
+                eprintln!("CGI Parent: Error reading from stdout pipe: {e}");
+            }
             drop(stdout_reader); // Close stdout pipe for CGI
 
+            // Wait for the child process to exit and get its status
             let mut status = 0;
             libc::waitpid(pid, &mut status, 0);
 
-
-            // Parse CGI output into HTTP response
+            // Parse the CGI script's output into an HTTP response
             let cgi_output_str = String::from_utf8_lossy(&cgi_output);
 
             let all_lines: Vec<&str> = cgi_output_str.lines().collect();
 
             let mut headers = HashMap::new();
             let mut body_start = 0;
+            // Parse headers from CGI output (lines before the first empty line)
             for (i, line) in all_lines.iter().enumerate() {
                 if line.is_empty() {
                     body_start = i + 1;
@@ -181,6 +216,7 @@ fn handle_cgi_internal(
                 }
             }
 
+            // Extract the body, which is everything after the headers and the empty line
             let body = all_lines
                 .into_iter()
                 .skip(body_start)
@@ -188,9 +224,9 @@ fn handle_cgi_internal(
                 .join("\n")
                 .into_bytes();
 
-
-
+            // Create a new HTTP response from the CGI output
             let mut response = Response::new(200, body);
+            // Add headers parsed from CGI output to the HTTP response
             for (key, value) in headers {
                 response.headers.insert(key, value);
             }

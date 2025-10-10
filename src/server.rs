@@ -128,7 +128,6 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
                                 }
 
                                 let mut current_session = if let Some(id) = session_id {
-                                    println!("Attempting to retrieve session: {id}");
                                     session_manager_lock.get_session(&id)
                                 } else {
                                     None
