@@ -95,7 +95,6 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
 
                     // Leak the stream so it stays open; we’ll recreate from fd on read
                     std::mem::forget(stream);
-
                 }
             } else if ev.filter == EVFILT_READ {
                 // --- Data available from client ---
@@ -110,7 +109,6 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
                         Ok(n) => {
                             connections_activity.insert(fd, Instant::now()); // Update activity time
                             let request = crate::http::request::Request::from(&buf[..n]);
-
 
                             let response = {
                                 let mut session_manager_lock = match session_manager.lock() {
@@ -170,13 +168,12 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
                             // don't call libc::close(fd); Rust will close when stream drops
                         }
                         Err(e) => {
-                            eprintln!("Read error on fd {fd}: {e}");   
+                            eprintln!("Read error on fd {fd}: {e}");
                             // don't call libc::close(fd)
                         }
                     } // stream dropped here, fd automatically closed
                 }
             } else if ev.flags & EV_EOF != 0 {
-
                 unsafe {
                     libc::close(fd);
                 }

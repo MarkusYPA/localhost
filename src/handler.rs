@@ -80,7 +80,6 @@ fn handle_get(
             .unwrap_or_else(|| "0".to_string());
         let new_count = count.parse::<i32>().unwrap_or(0) + 1;
         s.data.insert("count".to_string(), new_count.to_string());
-
     }
 
     let relative_path = match request.path.strip_prefix(&route.path) {
@@ -90,12 +89,9 @@ fn handle_get(
     let relative_path = relative_path.strip_prefix('/').unwrap_or(relative_path);
     let path = Path::new(&route.root).join(relative_path);
 
-
     if path.is_dir() {
-
         let index_path = path.join(&route.index);
         if index_path.is_file() {
-
             return serve_file(&index_path, config);
         }
         // TODO: Directory listing
@@ -103,7 +99,6 @@ fn handle_get(
     }
 
     if path.is_file() {
-    
         if let Some(ext) = path.extension() {
             let ext_str = match ext.to_str() {
                 Some(s) => format!(".{s}"),
@@ -111,7 +106,6 @@ fn handle_get(
             };
 
             if let Some(cgi_executor) = route.cgi_map.get(&ext_str) {
-
                 return handle_cgi(request, route, config, &path, cgi_executor, session);
             } else {
                 println!("handle_get: No CGI executor found for extension {ext:?}");
