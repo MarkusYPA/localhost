@@ -2,14 +2,23 @@ use serde::Deserialize;
 use std::collections::HashMap;
 
 #[derive(Debug, Deserialize)]
-pub struct ServerConfig {
+pub struct VirtualServer {
     pub host: String,
-    pub ports: Vec<u16>,
     pub routes: Vec<Route>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ServerConfig {
+    pub ports: Vec<u16>,
+    pub servers: Vec<VirtualServer>,
     #[serde(default)]
     pub error_pages: HashMap<u16, String>,
-    #[serde(default)]
+    #[serde(default = "default_client_max_body_size")]
     pub client_max_body_size: usize,
+}
+
+fn default_client_max_body_size() -> usize {
+    1024 * 1024 // 1MB
 }
 
 #[derive(Debug, Deserialize)]
@@ -37,38 +46,46 @@ mod tests {
     fn test_simple_config() {
         let config_str = r#"
         {
-            "host": "127.0.0.1",
             "ports": [8080],
             "client_max_body_size": 1024,
-            "routes": []
+            "servers": [
+                {
+                    "host": "127.0.0.1",
+                    "routes": []
+                }
+            ]
         }
         "#;
         let config = parse_config(config_str).unwrap();
-        assert_eq!(config.host, "127.0.0.1");
         assert_eq!(config.ports, vec![8080]);
         assert_eq!(config.client_max_body_size, 1024);
+        assert_eq!(config.servers[0].host, "127.0.0.1");
     }
 
     #[test]
     fn test_config_with_route() {
         let config_str = r#"
         {
-            "host": "127.0.0.1",
             "ports": [8080],
-            "routes": [
+            "servers": [
                 {
-                    "path": "/",
-                    "methods": ["GET", "POST"],
-                    "root": "/var/www",
-                    "index": "index.html",
-                    "autoindex": true
+                    "host": "127.0.0.1",
+                    "routes": [
+                        {
+                            "path": "/",
+                            "methods": ["GET", "POST"],
+                            "root": "/var/www",
+                            "index": "index.html",
+                            "autoindex": true
+                        }
+                    ]
                 }
             ]
         }
         "#;
         let config = parse_config(config_str).unwrap();
-        assert_eq!(config.routes.len(), 1);
-        let route = &config.routes[0];
+        assert_eq!(config.servers[0].routes.len(), 1);
+        let route = &config.servers[0].routes[0];
         assert_eq!(route.path, "/");
         assert_eq!(route.methods, vec!["GET", "POST"]);
         assert_eq!(route.root, "/var/www");
@@ -80,23 +97,27 @@ mod tests {
     fn test_config_with_cgi() {
         let config_str = r#"
         {
-            "host": "127.0.0.1",
             "ports": [8080],
-            "routes": [
+            "servers": [
                 {
-                    "path": "/cgi-bin",
-                    "methods": ["GET", "POST"],
-                    "root": "/var/cgi",
-                    "cgi_map": {
-                        ".py": "python3"
-                    }
+                    "host": "127.0.0.1",
+                    "routes": [
+                        {
+                            "path": "/cgi-bin",
+                            "methods": ["GET", "POST"],
+                            "root": "/var/cgi",
+                            "cgi_map": {
+                                ".py": "python3"
+                            }
+                        }
+                    ]
                 }
             ]
         }
         "#;
         let config = parse_config(config_str).unwrap();
-        assert_eq!(config.routes.len(), 1);
-        let route = &config.routes[0];
+        assert_eq!(config.servers[0].routes.len(), 1);
+        let route = &config.servers[0].routes[0];
         assert_eq!(route.path, "/cgi-bin");
         assert_eq!(route.cgi_map.get(".py").unwrap(), "python3");
     }
@@ -105,8 +126,8 @@ mod tests {
     fn test_invalid_config() {
         let config_str = r#"
         {
-            "host": "127.0.0.1",
-            "ports": "not-a-number"
+            "ports": "not-a-number",
+            "servers": []
         }
         "#;
         let config = parse_config(config_str);

@@ -1,5 +1,5 @@
 use crate::cgi::handle_cgi;
-use crate::config::{Route, ServerConfig};
+use crate::config::{Route, ServerConfig, VirtualServer};
 use crate::http::request::Request;
 use crate::http::response::Response;
 use crate::session::Session;
@@ -36,11 +36,11 @@ fn handle_error(status_code: u16, config: &ServerConfig) -> Response {
     }
 }
 
-pub fn find_route<'a>(request: &Request, config: &'a ServerConfig) -> Option<&'a Route> {
+pub fn find_route<'a>(request: &Request, server: &'a VirtualServer) -> Option<&'a Route> {
     let mut best_match: Option<&'a Route> = None;
     let mut longest_path = 0;
 
-    for route in &config.routes {
+    for route in &server.routes {
         if request.path.starts_with(&route.path) && route.path.len() > longest_path {
             longest_path = route.path.len();
             best_match = Some(route);
@@ -53,6 +53,7 @@ pub fn find_route<'a>(request: &Request, config: &'a ServerConfig) -> Option<&'a
 pub fn handle_request(
     request: &Request,
     route: &Route,
+    server: &VirtualServer,
     config: &ServerConfig,
     session: &mut Option<&mut Session>,
 ) -> Response {
@@ -61,7 +62,8 @@ pub fn handle_request(
     }
 
     match request.method.as_str() {
-        "GET" => handle_get(request, route, config, session),
+        "GET" => handle_get(request, route, server, config, session),
+        "POST" => handle_post(request, route, server, config, session),
         _ => handle_error(501, config),
     }
 }
@@ -69,6 +71,7 @@ pub fn handle_request(
 fn handle_get(
     request: &Request,
     route: &Route,
+    server: &VirtualServer,
     config: &ServerConfig,
     session: &mut Option<&mut Session>,
 ) -> Response {
@@ -81,13 +84,12 @@ fn handle_get(
         let new_count = count.parse::<i32>().unwrap_or(0) + 1;
         s.data.insert("count".to_string(), new_count.to_string());
     }
-
     let relative_path = match request.path.strip_prefix(&route.path) {
         Some(path) => path,
         None => return handle_error(500, config),
     };
-    let relative_path = relative_path.strip_prefix('/').unwrap_or(relative_path);
-    let path = Path::new(&route.root).join(relative_path);
+    let path = Path::new(&route.root).join(relative_path.strip_prefix('/').unwrap_or(relative_path));
+    println!("Serving file from: {:?}", path);
 
     if path.is_dir() {
         let index_path = path.join(&route.index);
@@ -106,11 +108,9 @@ fn handle_get(
             };
 
             if let Some(cgi_executor) = route.cgi_map.get(&ext_str) {
-                return handle_cgi(request, route, config, &path, cgi_executor, session);
-            } else {
-                println!("handle_get: No CGI executor found for extension {ext:?}");
-                return serve_file(&path, config);
+                return handle_cgi(request, route, server, config, &path, cgi_executor, session);
             }
+            return serve_file(&path, config);
         } else {
             println!("handle_get: No file extension found");
             return serve_file(&path, config);
@@ -135,6 +135,34 @@ fn serve_file(path: &Path, config: &ServerConfig) -> Response {
     }
 }
 
+fn handle_post(
+    request: &Request,
+    route: &Route,
+    _server: &VirtualServer,
+    config: &ServerConfig,
+    _session: &mut Option<&mut Session>,
+) -> Response {
+    let relative_path = match request.path.strip_prefix(&route.path) {
+        Some(path) => path,
+        None => return handle_error(500, config),
+    };
+    let relative_path = relative_path.strip_prefix('/').unwrap_or(relative_path);
+    let path = Path::new(&route.root).join(relative_path);
+    println!("Uploading file to: {:?}", path);
+
+    if let Some(parent) = path.parent() {
+        if let Err(_) = fs::create_dir_all(parent) {
+            return handle_error(500, config);
+        }
+    }
+
+    match fs::write(&path, &request.body) {
+        Ok(_) => Response::new(200, b"OK".to_vec()),
+        Err(_) => handle_error(500, config),
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -143,26 +171,35 @@ mod tests {
 
     fn basic_config() -> ServerConfig {
         let config_str = r#"
-server {
-    host: 127.0.0.1
-    port: 8080
-    route / {
-        methods: GET
-        root: /var/www
-        index: index.html
-    }
-    route /api {
-        methods: GET POST
-        root: /var/api
-    }
-}
-"#;
+        {
+            "ports": [8080],
+            "servers": [
+                {
+                    "host": "127.0.0.1",
+                    "routes": [
+                        {
+                            "path": "/",
+                            "methods": ["GET"],
+                            "root": "/var/www",
+                            "index": "index.html"
+                        },
+                        {
+                            "path": "/api",
+                            "methods": ["GET", "POST"],
+                            "root": "/var/api"
+                        }
+                    ]
+                }
+            ]
+        }
+        "#;
         parse_config(config_str).unwrap()
     }
 
     #[test]
     fn test_find_route_longest_match() {
         let config = basic_config();
+        let server = &config.servers[0];
         let request = Request {
             method: "GET".to_string(),
             path: "/api/users".to_string(),
@@ -171,13 +208,14 @@ server {
             query_params: HashMap::new(),
             cookies: HashMap::new(),
         };
-        let route = find_route(&request, &config).unwrap();
+        let route = find_route(&request, server).unwrap();
         assert_eq!(route.path, "/api");
     }
 
     #[test]
     fn test_find_route_matches_root() {
         let config = basic_config();
+        let server = &config.servers[0];
         let request = Request {
             method: "GET".to_string(),
             path: "/unmatched".to_string(),
@@ -186,13 +224,14 @@ server {
             query_params: HashMap::new(),
             cookies: HashMap::new(),
         };
-        let route = find_route(&request, &config).unwrap();
+        let route = find_route(&request, server).unwrap();
         assert_eq!(route.path, "/");
     }
 
     #[test]
     fn test_handle_request_method_not_allowed() {
         let config = basic_config();
+        let server = &config.servers[0];
         let request = Request {
             method: "POST".to_string(),
             path: "/".to_string(),
@@ -201,14 +240,15 @@ server {
             query_params: HashMap::new(),
             cookies: HashMap::new(),
         };
-        let route = find_route(&request, &config).unwrap();
-        let response = handle_request(&request, route, &config, &mut None);
+        let route = find_route(&request, server).unwrap();
+        let response = handle_request(&request, route, server, &config, &mut None);
         assert_eq!(response.status_code, 405);
     }
 
     #[test]
     fn test_path_traversal_attack() {
         let config = basic_config();
+        let server = &config.servers[0];
         let request = Request {
             method: "GET".to_string(),
             path: "/../../../../etc/passwd".to_string(),
@@ -217,7 +257,7 @@ server {
             query_params: HashMap::new(),
             cookies: HashMap::new(),
         };
-        let route = find_route(&request, &config).unwrap();
+        let route = find_route(&request, server).unwrap();
         // This test is not perfect, as it doesn't check the file system.
         // However, it ensures that the path is correctly joined.
         let relative_path = request.path.strip_prefix(&route.path).unwrap();

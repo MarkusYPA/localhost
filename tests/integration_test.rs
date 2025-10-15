@@ -9,7 +9,7 @@ static START: Once = Once::new();
 lazy_static! {
     static ref SERVER_THREAD: thread::JoinHandle<()> = {
         thread::spawn(|| {
-            if let Err(e) = http_server::run() {
+            if let Err(e) = http_server::run(None) {
                 eprintln!("Server error: {}", e);
                 std::process::exit(1);
             }
@@ -81,4 +81,31 @@ fn test_serve_static_website() {
     assert_eq!(resp.headers()["content-type"], "image/png");
     let body = resp.text().unwrap();
     assert_eq!(body, "placeholder image");
+}
+
+#[test]
+fn test_routing() {
+    setup();
+
+    // Test the /site/ route
+    let resp = reqwest::blocking::get("http://127.0.0.1:8081/site/").unwrap();
+    assert_eq!(resp.status(), 200);
+    let body = resp.text().unwrap();
+    assert!(body.contains("<h1>Welcome to the test website!</h1>"));
+
+    // Test the /cgi-bin/ route
+    let resp = reqwest::blocking::get("http://127.0.0.1:8081/cgi-bin/test.py").unwrap();
+    assert_eq!(resp.status(), 200);
+    let body = resp.text().unwrap();
+    assert!(body.contains("Hello from Python CGI!"));
+}
+
+#[test]
+fn test_method_not_allowed() {
+    setup();
+
+    // Make a POST request to a route that only accepts GET
+    let client = reqwest::blocking::Client::new();
+    let resp = client.post("http://127.0.0.1:8081/site/").send().unwrap();
+    assert_eq!(resp.status(), 405);
 }

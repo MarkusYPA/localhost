@@ -1,0 +1,19 @@
+{
+  "ports": [8085],
+  "error_pages": {
+    "404": "/errors/404.html"
+  },
+  "servers": [
+    {
+      "host": "localhost",
+      "routes": [
+        {
+          "path": "/",
+          "methods": ["GET"],
+          "root": "./www",
+          "index": "index.html"
+        }
+      ]
+    }
+  ]
+}

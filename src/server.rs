@@ -16,11 +16,14 @@ const CONNECTION_TIMEOUT_SECS: u64 = 30;
 const MAX_CONNECTIONS: usize = 100;
 
 pub fn run(config: ServerConfig) -> std::io::Result<()> {
-    // --- Setup listener ---
-    let addr = format!("{}:{}", config.host, config.ports[0]);
-    let listener = TcpListener::bind(&addr)?;
-    listener.set_nonblocking(true)?;
-    println!("Server listening on {addr}");
+    let mut listeners = HashMap::new();
+    for port in &config.ports {
+        let addr = format!("0.0.0.0:{}", port);
+        let listener = TcpListener::bind(&addr)?;
+        listener.set_nonblocking(true)?;
+        println!("Server listening on {addr}");
+        listeners.insert(listener.as_raw_fd(), listener);
+    }
 
     // --- Create kqueue ---
     let kq = kqueue::kqueue()?;
@@ -32,18 +35,18 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
     // --- Connection activity tracking ---
     let mut connections_activity: HashMap<i32, Instant> = HashMap::new();
 
-    // --- Register listener fd for read events ---
-    let lfd = listener.as_raw_fd();
-    let change = libc::kevent {
-        ident: lfd as libc::uintptr_t,
-        filter: EVFILT_READ,
-        flags: EV_ADD | EV_ENABLE,
-        fflags: 0,
-        data: 0,
-        udata: std::ptr::null_mut(),
-    };
-
-    kqueue::kevent(kq, std::slice::from_ref(&change), &mut [], None)?;
+    // --- Register listener fds for read events ---
+    for lfd in listeners.keys() {
+        let change = libc::kevent {
+            ident: *lfd as libc::uintptr_t,
+            filter: EVFILT_READ,
+            flags: EV_ADD | EV_ENABLE,
+            fflags: 0,
+            data: 0,
+            udata: std::ptr::null_mut(),
+        };
+        kqueue::kevent(kq, std::slice::from_ref(&change), &mut [], None)?;
+    }
 
     // --- Event loop ---
     loop {
@@ -66,9 +69,9 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
         for ev in &events[..nev as usize] {
             let fd = ev.ident as i32;
 
-            if fd == lfd {
+            if let Some(listener) = listeners.get(&fd) {
                 // --- New connection ---
-                if let Ok((stream, _addr)) = listener.accept() {
+                if let Ok((stream, addr)) = listener.accept() {
                     if connections_activity.len() >= MAX_CONNECTIONS {
                         println!("Max connections reached, rejecting new connection from {addr}");
                         drop(stream); // Close the connection
@@ -100,7 +103,7 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
                 // --- Data available from client ---
                 unsafe {
                     let mut stream = std::net::TcpStream::from_raw_fd(fd);
-                    let mut buf = [0u8; 1024];
+                    let mut buf = [0u8; 2048];
                     match stream.read(&mut buf) {
                         Ok(0) => {
                             // client closed, just drop stream
@@ -109,6 +112,12 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
                         Ok(n) => {
                             connections_activity.insert(fd, Instant::now()); // Update activity time
                             let request = crate::http::request::Request::from(&buf[..n]);
+
+                            if request.body.len() > config.client_max_body_size {
+                                let response = crate::http::response::Response::new(413, b"Payload Too Large".to_vec());
+                                let _ = stream.write_all(&response.to_bytes());
+                                continue;
+                            }
 
                             let response = {
                                 let mut session_manager_lock = match session_manager.lock() {
@@ -139,11 +148,15 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
                                         session_manager_lock.get_session(&new_session.id);
                                 }
 
-                                match crate::handler::find_route(&request, &config) {
+                                let host = request.headers.get("host").map(|h| h.split(':').next().unwrap_or("")).unwrap_or("");
+                                let server = config.servers.iter().find(|s| s.host == host).unwrap_or(&config.servers[0]);
+
+                                match crate::handler::find_route(&request, server) {
                                     Some(route) => {
                                         let mut resp = crate::handler::handle_request(
                                             &request,
                                             route,
+                                            server,
                                             &config,
                                             &mut current_session,
                                         );
@@ -171,7 +184,7 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
                             eprintln!("Read error on fd {fd}: {e}");
                             // don't call libc::close(fd)
                         }
-                    } // stream dropped here, fd automatically closed
+                    }
                 }
             } else if ev.flags & EV_EOF != 0 {
                 unsafe {

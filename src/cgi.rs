@@ -1,4 +1,4 @@
-use crate::config::{Route, ServerConfig};
+use crate::config::{Route, ServerConfig, VirtualServer};
 use crate::http::request::Request;
 use crate::http::response::Response;
 use std::collections::HashMap;
@@ -20,12 +20,13 @@ fn to_cstring<S: AsRef<[u8]>>(s: S) -> Result<CString, Response> {
 pub fn handle_cgi(
     request: &Request,
     route: &Route,
+    server: &VirtualServer,
     config: &ServerConfig,
     cgi_path: &Path,
     cgi_executor: &str,
     session: &mut Option<&mut Session>,
 ) -> Response {
-    match handle_cgi_internal(request, route, config, cgi_path, cgi_executor, session) {
+    match handle_cgi_internal(request, route, server, config, cgi_path, cgi_executor, session) {
         Ok(resp) => resp,
         Err(resp) => resp,
     }
@@ -38,6 +39,7 @@ pub fn handle_cgi(
 fn handle_cgi_internal(
     request: &Request,
     _route: &Route,
+    _server: &VirtualServer,
     _config: &ServerConfig,
     cgi_path: &Path,
     cgi_executor: &str,
