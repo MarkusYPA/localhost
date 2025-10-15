@@ -1,5 +1,6 @@
 - It was necssasry to run this for the memory leak tests to work
 rustup component add rust-src --toolchain nightly-aarch64-apple-darwin
+Use 'rustup default nightly' to switch to nightly build and 'rustup default stable' for stable version.
 
 - Should the static website include a favicon?
 

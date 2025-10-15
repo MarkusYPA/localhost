@@ -1,5 +1,5 @@
 use crate::cgi::handle_cgi;
-use crate::config::{Route, ServerConfig, VirtualServer};
+use crate::config::{Route, ServerConfig};
 use crate::http::request::Request;
 use crate::http::response::Response;
 use crate::session::Session;
@@ -36,11 +36,11 @@ fn handle_error(status_code: u16, config: &ServerConfig) -> Response {
     }
 }
 
-pub fn find_route<'a>(request: &Request, server: &'a VirtualServer) -> Option<&'a Route> {
+pub fn find_route<'a>(request: &Request, config: &'a ServerConfig) -> Option<&'a Route> {
     let mut best_match: Option<&'a Route> = None;
     let mut longest_path = 0;
 
-    for route in &server.routes {
+    for route in &config.routes {
         if request.path.starts_with(&route.path) && route.path.len() > longest_path {
             longest_path = route.path.len();
             best_match = Some(route);
@@ -53,7 +53,6 @@ pub fn find_route<'a>(request: &Request, server: &'a VirtualServer) -> Option<&'
 pub fn handle_request(
     request: &Request,
     route: &Route,
-    server: &VirtualServer,
     config: &ServerConfig,
     session: &mut Option<&mut Session>,
 ) -> Response {
@@ -62,8 +61,7 @@ pub fn handle_request(
     }
 
     match request.method.as_str() {
-        "GET" => handle_get(request, route, server, config, session),
-        "POST" => handle_post(request, route, server, config, session),
+        "GET" => handle_get(request, route, config, session),
         _ => handle_error(501, config),
     }
 }
@@ -71,7 +69,6 @@ pub fn handle_request(
 fn handle_get(
     request: &Request,
     route: &Route,
-    server: &VirtualServer,
     config: &ServerConfig,
     session: &mut Option<&mut Session>,
 ) -> Response {
@@ -84,12 +81,13 @@ fn handle_get(
         let new_count = count.parse::<i32>().unwrap_or(0) + 1;
         s.data.insert("count".to_string(), new_count.to_string());
     }
+
     let relative_path = match request.path.strip_prefix(&route.path) {
         Some(path) => path,
         None => return handle_error(500, config),
     };
-    let path = Path::new(&route.root).join(relative_path.strip_prefix('/').unwrap_or(relative_path));
-    println!("Serving file from: {:?}", path);
+    let relative_path = relative_path.strip_prefix('/').unwrap_or(relative_path);
+    let path = Path::new(&route.root).join(relative_path);
 
     if path.is_dir() {
         let index_path = path.join(&route.index);
@@ -108,9 +106,11 @@ fn handle_get(
             };
 
             if let Some(cgi_executor) = route.cgi_map.get(&ext_str) {
-                return handle_cgi(request, route, server, config, &path, cgi_executor, session);
+                return handle_cgi(request, route, config, &path, cgi_executor, session);
+            } else {
+                println!("handle_get: No CGI executor found for extension {ext:?}");
+                return serve_file(&path, config);
             }
-            return serve_file(&path, config);
         } else {
             println!("handle_get: No file extension found");
             return serve_file(&path, config);
@@ -135,32 +135,6 @@ fn serve_file(path: &Path, config: &ServerConfig) -> Response {
     }
 }
 
-fn handle_post(
-    request: &Request,
-    route: &Route,
-    _server: &VirtualServer,
-    config: &ServerConfig,
-    _session: &mut Option<&mut Session>,
-) -> Response {
-    let relative_path = match request.path.strip_prefix(&route.path) {
-        Some(path) => path,
-        None => return handle_error(500, config),
-    };
-    let relative_path = relative_path.strip_prefix('/').unwrap_or(relative_path);
-    let path = Path::new(&route.root).join(relative_path);
-    println!("Uploading file to: {:?}", path);
-
-    if let Some(parent) = path.parent() {
-        if let Err(_) = fs::create_dir_all(parent) {
-            return handle_error(500, config);
-        }
-    }
-
-    match fs::write(&path, &request.body) {
-        Ok(_) => Response::new(200, b"OK".to_vec()),
-        Err(_) => handle_error(500, config),
-    }
-}
 
 
 #[cfg(test)]
