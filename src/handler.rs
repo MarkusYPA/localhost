@@ -146,23 +146,19 @@ mod tests {
     fn basic_config() -> ServerConfig {
         let config_str = r#"
         {
+            "host": "127.0.0.1",
             "ports": [8080],
-            "servers": [
+            "routes": [
                 {
-                    "host": "127.0.0.1",
-                    "routes": [
-                        {
-                            "path": "/",
-                            "methods": ["GET"],
-                            "root": "/var/www",
-                            "index": "index.html"
-                        },
-                        {
-                            "path": "/api",
-                            "methods": ["GET", "POST"],
-                            "root": "/var/api"
-                        }
-                    ]
+                    "path": "/",
+                    "methods": ["GET"],
+                    "root": "/var/www",
+                    "index": "index.html"
+                },
+                {
+                    "path": "/api",
+                    "methods": ["GET", "POST"],
+                    "root": "/var/api"
                 }
             ]
         }
@@ -173,7 +169,6 @@ mod tests {
     #[test]
     fn test_find_route_longest_match() {
         let config = basic_config();
-        let server = &config.servers[0];
         let request = Request {
             method: "GET".to_string(),
             path: "/api/users".to_string(),
@@ -182,14 +177,13 @@ mod tests {
             query_params: HashMap::new(),
             cookies: HashMap::new(),
         };
-        let route = find_route(&request, server).unwrap();
+        let route = find_route(&request, &config).unwrap();
         assert_eq!(route.path, "/api");
     }
 
     #[test]
     fn test_find_route_matches_root() {
         let config = basic_config();
-        let server = &config.servers[0];
         let request = Request {
             method: "GET".to_string(),
             path: "/unmatched".to_string(),
@@ -198,14 +192,13 @@ mod tests {
             query_params: HashMap::new(),
             cookies: HashMap::new(),
         };
-        let route = find_route(&request, server).unwrap();
+        let route = find_route(&request, &config).unwrap();
         assert_eq!(route.path, "/");
     }
 
     #[test]
     fn test_handle_request_method_not_allowed() {
         let config = basic_config();
-        let server = &config.servers[0];
         let request = Request {
             method: "POST".to_string(),
             path: "/".to_string(),
@@ -214,15 +207,14 @@ mod tests {
             query_params: HashMap::new(),
             cookies: HashMap::new(),
         };
-        let route = find_route(&request, server).unwrap();
-        let response = handle_request(&request, route, server, &config, &mut None);
+        let route = find_route(&request, &config).unwrap();
+        let response = handle_request(&request, route, &config, &mut None);
         assert_eq!(response.status_code, 405);
     }
 
     #[test]
     fn test_path_traversal_attack() {
         let config = basic_config();
-        let server = &config.servers[0];
         let request = Request {
             method: "GET".to_string(),
             path: "/../../../../etc/passwd".to_string(),
@@ -231,7 +223,7 @@ mod tests {
             query_params: HashMap::new(),
             cookies: HashMap::new(),
         };
-        let route = find_route(&request, server).unwrap();
+        let route = find_route(&request, &config).unwrap();
         // This test is not perfect, as it doesn't check the file system.
         // However, it ensures that the path is correctly joined.
         let relative_path = request.path.strip_prefix(&route.path).unwrap();

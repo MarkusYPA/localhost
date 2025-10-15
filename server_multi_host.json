@@ -1,27 +1,12 @@
 {
-  "ports": [8081],
-  "servers": [
+  "host": "127.0.0.1",
+  "ports": [8084],
+  "routes": [
     {
-      "host": "test1.com",
-      "routes": [
-        {
-          "path": "/",
-          "methods": ["GET"],
-          "root": "./www/site1",
-          "index": "index.html"
-        }
-      ]
-    },
-    {
-      "host": "test2.com",
-      "routes": [
-        {
-          "path": "/",
-          "methods": ["GET"],
-          "root": "./www/site2",
-          "index": "index.html"
-        }
-      ]
+      "path": "/",
+      "methods": ["GET"],
+      "root": "./www/site1",
+      "index": "index.html"
     }
   ]
 }

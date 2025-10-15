@@ -16,11 +16,19 @@ const CONNECTION_TIMEOUT_SECS: u64 = 30;
 const MAX_CONNECTIONS: usize = 100;
 
 pub fn run(config: ServerConfig) -> std::io::Result<()> {
-    // --- Setup listener ---
-    let addr = format!("{}:{}", config.host, config.ports[0]);
-    let listener = TcpListener::bind(&addr)?;
-    listener.set_nonblocking(true)?;
-    println!("Server listening on {addr}");
+    // --- Setup listeners ---
+    let mut listeners_map = HashMap::new();
+    let mut listener_fds = Vec::new();
+
+    for port in &config.ports {
+        let addr = format!("{}:{}", config.host, port);
+        let listener = TcpListener::bind(&addr)?;
+        listener.set_nonblocking(true)?;
+        println!("Server listening on {addr}");
+        let lfd = listener.as_raw_fd();
+        listeners_map.insert(lfd, listener);
+        listener_fds.push(lfd);
+    }
 
     // --- Create kqueue ---
     let kq = kqueue::kqueue()?;
@@ -32,18 +40,20 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
     // --- Connection activity tracking ---
     let mut connections_activity: HashMap<i32, Instant> = HashMap::new();
 
-    // --- Register listener fd for read events ---
-    let lfd = listener.as_raw_fd();
-    let change = libc::kevent {
-        ident: lfd as libc::uintptr_t,
-        filter: EVFILT_READ,
-        flags: EV_ADD | EV_ENABLE,
-        fflags: 0,
-        data: 0,
-        udata: std::ptr::null_mut(),
-    };
+    // --- Register listener fds for read events ---
+    let changes: Vec<libc::kevent> = listener_fds
+        .iter()
+        .map(|&lfd| libc::kevent {
+            ident: lfd as libc::uintptr_t,
+            filter: EVFILT_READ,
+            flags: EV_ADD | EV_ENABLE,
+            fflags: 0,
+            data: 0,
+            udata: std::ptr::null_mut(),
+        })
+        .collect();
 
-    kqueue::kevent(kq, std::slice::from_ref(&change), &mut [], None)?;
+    kqueue::kevent(kq, &changes, &mut [], None)?;
 
     // --- Event loop ---
     loop {
@@ -66,8 +76,10 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
         for ev in &events[..nev as usize] {
             let fd = ev.ident as i32;
 
-            if fd == lfd {
+            if listener_fds.contains(&fd) {
                 // --- New connection ---
+                // Retrieve the correct listener from the map
+                let listener = listeners_map.get_mut(&fd).unwrap();
                 if let Ok((stream, addr)) = listener.accept() {
                     if connections_activity.len() >= MAX_CONNECTIONS {
                         println!("Max connections reached, rejecting new connection from {addr}");
