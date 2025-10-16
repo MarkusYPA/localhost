@@ -201,7 +201,7 @@ func TestMultiPort(t *testing.T) {
 	}
 
 	// Make a request to the server on the second port
-	resp, err = http.Get("http://127.0.0.1:8083/")
+	resp, err = http.Get("http://127.0.0.1:8081/")
 	if err != nil {
 		t.Fatalf("Failed to send request: %v", err)
 	}
