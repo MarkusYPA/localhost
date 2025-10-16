@@ -3,9 +3,9 @@
 ## Core Server
 - [x] Implement a single-threaded, non-blocking event loop using `kqueue`.
 - [x] Handle multiple listeners on different ports.
-- [ ] Implement robust error handling to prevent crashes.
+- [x] Implement robust error handling to prevent crashes.
 - [x] Implement connection timeout for idle clients.
-- [ ] Implement a limit for maximum concurrent connections.
+- [x] Implement a limit for maximum concurrent connections.
 - [ ] Handle graceful shutdown.
 
 ## HTTP
@@ -21,10 +21,10 @@
 - [ ] Implement HTTP redirections.
 
 ## CGI
-- [ ] Implement CGI execution by forking a new process.
-- [ ] Pass environment variables to the CGI script (e.g., `PATH_INFO`, `REQUEST_METHOD`).
+- [x] Implement CGI execution by forking a new process.
+- [x] Pass environment variables to the CGI script (e.g., `PATH_INFO`, `REQUEST_METHOD`).
 - [ ] Handle CGI script timeout.
-- [ ] Support at least one CGI language (e.g., Python).
+- [x] Support at least one CGI language (e.g., Python).
 - [ ] Bonus: Support more CGI languages.
 
 ## Configuration

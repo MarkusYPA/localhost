@@ -1,12 +1,12 @@
 use crate::cgi::handle_cgi;
-use crate::config::{Route, ServerConfig};
+use crate::config::{Route, SingleServerConfig};
 use crate::http::request::Request;
 use crate::http::response::Response;
 use crate::session::Session;
 use std::fs;
 use std::path::Path;
 
-fn handle_error(status_code: u16, config: &ServerConfig) -> Response {
+fn handle_error(status_code: u16, config: &SingleServerConfig) -> Response {
     if let Some(error_page_path_str) = config.error_pages.get(&status_code) {
         let current_dir = match std::env::current_dir() {
             Ok(dir) => dir,
@@ -36,7 +36,7 @@ fn handle_error(status_code: u16, config: &ServerConfig) -> Response {
     }
 }
 
-pub fn find_route<'a>(request: &Request, config: &'a ServerConfig) -> Option<&'a Route> {
+pub fn find_route<'a>(request: &Request, config: &'a SingleServerConfig) -> Option<&'a Route> {
     let mut best_match: Option<&'a Route> = None;
     let mut longest_path = 0;
 
@@ -53,7 +53,7 @@ pub fn find_route<'a>(request: &Request, config: &'a ServerConfig) -> Option<&'a
 pub fn handle_request(
     request: &Request,
     route: &Route,
-    config: &ServerConfig,
+    config: &SingleServerConfig,
     session: &mut Option<&mut Session>,
 ) -> Response {
     if !route.methods.contains(&request.method) {
@@ -69,7 +69,7 @@ pub fn handle_request(
 fn handle_get(
     request: &Request,
     route: &Route,
-    config: &ServerConfig,
+    config: &SingleServerConfig,
     session: &mut Option<&mut Session>,
 ) -> Response {
     if let Some(s) = session {
@@ -121,7 +121,7 @@ fn handle_get(
     handle_error(404, config)
 }
 
-fn serve_file(path: &Path, config: &ServerConfig) -> Response {
+fn serve_file(path: &Path, config: &SingleServerConfig) -> Response {
     match fs::read(path) {
         Ok(body) => {
             let mut response = Response::new(200, body);
@@ -143,27 +143,30 @@ mod tests {
     use crate::config::parse_config;
     use std::collections::HashMap;
 
-    fn basic_config() -> ServerConfig {
+    fn basic_config() -> SingleServerConfig {
         let config_str = r#"
         {
-            "host": "127.0.0.1",
-            "ports": [8080],
-            "routes": [
-                {
-                    "path": "/",
-                    "methods": ["GET"],
-                    "root": "/var/www",
-                    "index": "index.html"
-                },
-                {
-                    "path": "/api",
-                    "methods": ["GET", "POST"],
-                    "root": "/var/api"
-                }
-            ]
+            "servers": [{
+                "server_name": "localhost",
+                "host": "127.0.0.1",
+                "ports": [8080],
+                "routes": [
+                    {
+                        "path": "/",
+                        "methods": ["GET"],
+                        "root": "/var/www",
+                        "index": "index.html"
+                    },
+                    {
+                        "path": "/api",
+                        "methods": ["GET", "POST"],
+                        "root": "/var/api"
+                    }
+                ]
+            }]
         }
         "#;
-        parse_config(config_str).unwrap()
+        parse_config(config_str).unwrap().servers.remove(0)
     }
 
     #[test]

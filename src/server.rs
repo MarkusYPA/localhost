@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use libc::{self, EVFILT_READ, EV_ADD, EV_ENABLE, EV_EOF};
 
-use crate::config::ServerConfig;
+use crate::config::{ServerConfig, SingleServerConfig};
 use crate::io::kqueue;
 use crate::session::SessionManager;
 use uuid::Uuid;
@@ -19,15 +19,19 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
     // --- Setup listeners ---
     let mut listeners_map = HashMap::new();
     let mut listener_fds = Vec::new();
+    let mut server_configs = HashMap::new();
 
-    for port in &config.ports {
-        let addr = format!("{}:{}", config.host, port);
-        let listener = TcpListener::bind(&addr)?;
-        listener.set_nonblocking(true)?;
-        println!("Server listening on {addr}");
-        let lfd = listener.as_raw_fd();
-        listeners_map.insert(lfd, listener);
-        listener_fds.push(lfd);
+    for server_config in config.servers {
+        for port in &server_config.ports {
+            let addr = format!("{}:{}", server_config.host, port);
+            let listener = TcpListener::bind(&addr)?;
+            listener.set_nonblocking(true)?;
+            println!("Server listening on {addr}");
+            let lfd = listener.as_raw_fd();
+            listeners_map.insert(lfd, listener);
+            listener_fds.push(lfd);
+            server_configs.insert(lfd, server_config.clone());
+        }
     }
 
     // --- Create kqueue ---
@@ -122,7 +126,13 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
                             connections_activity.insert(fd, Instant::now()); // Update activity time
                             let request = crate::http::request::Request::from(&buf[..n]);
 
-                            if request.body.len() > config.client_max_body_size {
+                                                        let host = request.headers.get("host").map(|s| s.as_str()).unwrap_or("");
+                            let server_config = server_configs
+                                .values()
+                                .find(|c| c.server_name == host)
+                                .unwrap_or_else(|| server_configs.values().next().unwrap());
+
+                            if request.body.len() > server_config.client_max_body_size {
                                 let response = crate::http::response::Response::new(413, b"Payload Too Large".to_vec());
                                 let _ = stream.write_all(&response.to_bytes());
                                 continue;
@@ -159,12 +169,12 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
 
 
 
-                                match crate::handler::find_route(&request, &config) {
+                                match crate::handler::find_route(&request, server_config) {
                                     Some(route) => {
                                         let mut resp = crate::handler::handle_request(
                                             &request,
                                             route,
-                                            &config,
+                                            server_config,
                                             &mut current_session,
                                         );
                                         if let Some(sid) = session_id {
