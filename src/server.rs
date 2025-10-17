@@ -12,7 +12,7 @@ use crate::io::kqueue;
 use crate::session::SessionManager;
 use uuid::Uuid;
 
-const CONNECTION_TIMEOUT_SECS: u64 = 30;
+const CONNECTION_TIMEOUT_SECS: u64 = 2;
 const MAX_CONNECTIONS: usize = 100;
 
 pub fn run(config: ServerConfig) -> std::io::Result<()> {
@@ -115,7 +115,7 @@ pub fn run(config: ServerConfig) -> std::io::Result<()> {
                     println!("Accepted connection from {}", addr);
                     stream.set_nonblocking(true)?;
                     let cfd = stream.as_raw_fd();
-
+                    println!("Registered client {}", cfd);
                     // Register client fd for read events
                     let change = libc::kevent {
                         ident: cfd as libc::uintptr_t,

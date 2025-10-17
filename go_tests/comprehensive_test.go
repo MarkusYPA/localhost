@@ -2,6 +2,7 @@ package go_tests
 
 import (
 	"io/ioutil"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -10,7 +11,6 @@ import (
 )
 
 func TestComprehensiveServer(t *testing.T) {
-	time.Sleep(2 * time.Second) // Wait for the server to start
 
 	t.Run("Port8080_Localhost", testPort8080_Localhost)
 	t.Run("Port8081_Site1", testPort8081_Site1)
@@ -24,6 +24,7 @@ func TestComprehensiveServer(t *testing.T) {
 	t.Run("FileUploadAndDownload", testFileUploadAndDownload)
 	t.Run("DeleteRequest", testDeleteRequest)
 	t.Run("DirectoryListing", testDirectoryListing)
+	t.Run("Timeout", testTimeout)
 }
 
 func testPort8080_Localhost(t *testing.T) {
@@ -188,6 +189,21 @@ func testDeleteRequest(t *testing.T) {
 func testDirectoryListing(t *testing.T) {
 	resp := testGetRequest(t, "http://localhost:8080/empty_dir/", http.StatusForbidden)
 	resp.Body.Close()
+}
+
+func testTimeout(t *testing.T) {
+	conn, err := net.Dial("tcp", "localhost:8080")
+	if err != nil {
+		t.Fatalf("Failed to connect to server: %v", err)
+	}
+	defer conn.Close()
+
+	time.Sleep(3 * time.Second)
+
+	_, err = conn.Write([]byte("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n"))
+	if err == nil {
+		t.Errorf("Expected a write error after timeout, but got none")
+	}
 }
 
 // Helper functions

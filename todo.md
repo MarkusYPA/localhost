@@ -4,7 +4,7 @@
 - [x] Implement a single-threaded, non-blocking event loop using `kqueue`.
 - [x] Handle multiple listeners on different ports.
 - [x] Implement robust error handling to prevent crashes.
-- [x] Implement connection timeout for idle clients.
+- [ ] Implement connection timeout for idle clients.
 - [x] Implement a limit for maximum concurrent connections.
 - [ ] Handle graceful shutdown.
 

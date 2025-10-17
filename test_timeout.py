@@ -7,5 +7,5 @@ PORT = 8081
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.connect((HOST, PORT))
     print(f"Connected to {HOST}:{PORT}")
-    time.sleep(40)
+    time.sleep(15)
     print("Finished sleeping")
