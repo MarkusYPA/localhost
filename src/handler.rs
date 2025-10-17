@@ -7,7 +7,10 @@ use std::fs;
 use std::path::Path;
 use uuid::Uuid;
 
-fn handle_error(status_code: u16, config: &SingleServerConfig) -> Response {
+fn handle_error(status_code: u16, config: &SingleServerConfig, request: Option<&Request>) -> Response {
+    if let Some(req) = request {
+        eprintln!("[ERROR] {} {}: {}", req.method, req.path, crate::http::status::reason_phrase(status_code));
+    }
     if let Some(error_page_path_str) = config.error_pages.get(&status_code) {
         let current_dir = match std::env::current_dir() {
             Ok(dir) => dir,
@@ -58,35 +61,35 @@ pub fn handle_request(
     session: &mut Option<&mut Session>,
 ) -> Response {
     if !route.methods.contains(&request.method) {
-        return handle_error(405, config);
+        return handle_error(405, config, Some(request));
     }
 
     match request.method.as_str() {
         "GET" => handle_get(request, route, config, session),
         "POST" => handle_post(request, route, config),
         "DELETE" => handle_delete(request, route, config),
-        _ => handle_error(501, config),
+        _ => handle_error(501, config, Some(request)),
     }
 }
 
 fn handle_delete(request: &Request, route: &Route, config: &SingleServerConfig) -> Response {
     let file_name = match request.path.strip_prefix(&route.path) {
         Some(name) => name.trim_start_matches('/'),
-        None => return handle_error(400, config),
+        None => return handle_error(400, config, Some(request)),
     };
 
     if file_name.is_empty() {
-        return handle_error(400, config);
+        return handle_error(400, config, Some(request));
     }
 
     let path = Path::new(&route.root).join(&file_name);
 
     if !path.is_file() {
-        return handle_error(404, config);
+        return handle_error(404, config, Some(request));
     }
 
     if let Err(_) = fs::remove_file(&path) {
-        return handle_error(500, config);
+        return handle_error(500, config, Some(request));
     }
 
     Response::new(200, b"File deleted successfully".to_vec())
@@ -97,11 +100,11 @@ fn handle_post(request: &Request, route: &Route, config: &SingleServerConfig) ->
     let path = Path::new(&route.root).join(&file_name);
 
     if let Err(_) = fs::create_dir_all(&route.root) {
-        return handle_error(500, config);
+        return handle_error(500, config, Some(request));
     }
 
     if let Err(_) = fs::write(&path, &request.body) {
-        return handle_error(500, config);
+        return handle_error(500, config, Some(request));
     }
 
     let file_url = format!("/uploads/{}", file_name);
@@ -128,7 +131,7 @@ fn handle_get(
 
     let relative_path = match request.path.strip_prefix(&route.path) {
         Some(path) => path,
-        None => return handle_error(500, config),
+        None => return handle_error(500, config, Some(request)),
     };
     let relative_path = relative_path.strip_prefix('/').unwrap_or(relative_path);
     let path = Path::new(&route.root).join(relative_path);
@@ -136,36 +139,36 @@ fn handle_get(
     if path.is_dir() {
         let index_path = path.join(&route.index);
         if index_path.is_file() {
-            return serve_file(&index_path, config);
+            return serve_file(&index_path, config, Some(request));
         }
         // TODO: Directory listing
-        return handle_error(403, config);
+        return handle_error(403, config, Some(request));
     }
 
     if path.is_file() {
         if let Some(ext) = path.extension() {
             let ext_str = match ext.to_str() {
                 Some(s) => format!(".{s}"),
-                None => return handle_error(400, config),
+                None => return handle_error(400, config, Some(request)),
             };
 
             if let Some(cgi_executor) = route.cgi_map.get(&ext_str) {
                 return handle_cgi(request, route, config, &path, cgi_executor, session);
             } else {
                 println!("handle_get: No CGI executor found for extension {ext:?}");
-                return serve_file(&path, config);
+                return serve_file(&path, config, Some(request));
             }
         } else {
             println!("handle_get: No file extension found");
-            return serve_file(&path, config);
+            return serve_file(&path, config, Some(request));
         }
     }
 
     println!("handle_get: 404 Not Found");
-    handle_error(404, config)
+    handle_error(404, config, Some(request))
 }
 
-fn serve_file(path: &Path, config: &SingleServerConfig) -> Response {
+fn serve_file(path: &Path, config: &SingleServerConfig, request: Option<&Request>) -> Response {
     match fs::read(path) {
         Ok(body) => {
             let mut response = Response::new(200, body);
@@ -175,7 +178,7 @@ fn serve_file(path: &Path, config: &SingleServerConfig) -> Response {
                 .insert("Content-Type".to_string(), content_type.to_string());
             response
         }
-        Err(_) => handle_error(500, config),
+        Err(_) => handle_error(500, config, request),
     }
 }
 
