@@ -1,0 +1,80 @@
+{
+  "servers": [
+    {
+      "server_name": "site1.com",
+      "host": "127.0.0.1",
+      "ports": [8081, 8082],
+      "routes": [
+        {
+          "path": "/",
+          "methods": ["GET"],
+          "root": "./www/site1",
+          "index": "index.html"
+        }
+      ]
+    },
+    {
+      "server_name": "site2.com",
+      "host": "127.0.0.1",
+      "ports": [8081],
+      "routes": [
+        {
+          "path": "/",
+          "methods": ["GET"],
+          "root": "./www/site2",
+          "index": "index.html"
+        }
+      ]
+    },
+    {
+      "server_name": "localhost",
+      "host": "127.0.0.1",
+      "ports": [8080],
+      "client_max_body_size": 1048576,
+      "error_pages": {
+        "404": "/errors/404.html"
+      },
+      "routes": [
+        {
+          "path": "/",
+          "methods": ["GET"],
+          "root": "./www/site",
+          "index": "index.html"
+        },
+        {
+          "path": "/post_test",
+          "methods": ["POST"],
+          "root": "./www/uploads"
+        },
+        {
+          "path": "/uploads",
+          "methods": ["GET"],
+          "root": "./www/uploads"
+        },
+        {
+          "path": "/delete_test",
+          "methods": ["DELETE"],
+          "root": "./www/uploads"
+        },
+        {
+          "path": "/empty_dir",
+          "methods": ["GET"],
+          "root": "./www/empty_dir"
+        }
+      ]
+    },
+    {
+      "server_name": "body_limit_test",
+      "host": "127.0.0.1",
+      "ports": [8083],
+      "client_max_body_size": 10,
+      "routes": [
+        {
+          "path": "/",
+          "methods": ["POST"],
+          "root": "./www/uploads"
+        }
+      ]
+    }
+  ]
+}

@@ -12,8 +12,8 @@
 - [x] Parse HTTP/1.1 requests (method, path, headers, body).
 - [x] Build HTTP/1.1 responses.
 - [x] Implement `GET` method for static files.
-- [ ] Implement `POST` method for file uploads.
-- [ ] Implement `DELETE` method for deleting files.
+- [x] Implement `POST` method for file uploads.
+- [x] Implement `DELETE` method for deleting files.
 - [ ] Handle chunked transfer encoding for requests.
 - [ ] Handle chunked transfer encoding for responses.
 - [x] Implement session management with cookies.
@@ -33,13 +33,13 @@
 - [x] Configure routes with methods, root, and index files.
 - [x] Configure custom error pages.
 - [x] Configure client body size limit.
-- [ ] Configure directory listing on/off.
+- [x] Configure directory listing on/off.
 - [ ] Configure HTTP redirections.
-- [ ] Handle default server selection based on `server_name`.
+- [x] Handle default server selection based on `server_name`.
 
 ## Testing
 - [ ] Create comprehensive unit tests for all modules.
-- [ ] Create integration tests for all HTTP methods and features.
+- [x] Create integration tests for all HTTP methods and features.
 - [ ] Perform stress testing with `siege` to ensure >99.5% availability.
 - [ ] Test for memory leaks using `valgrind` or AddressSanitizer.
 - [ ] Test with a real browser to ensure compatibility.

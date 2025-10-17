@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::os::fd::{AsRawFd, FromRawFd};
@@ -18,12 +18,24 @@ const MAX_CONNECTIONS: usize = 100;
 pub fn run(config: ServerConfig) -> std::io::Result<()> {
     // --- Setup listeners ---
     let mut configs_by_port = HashMap::<u16, Vec<SingleServerConfig>>::new();
-    for server_config in config.servers {
+    for server_config in &config.servers {
         for port in &server_config.ports {
             configs_by_port
                 .entry(*port)
                 .or_default()
                 .push(server_config.clone());
+        }
+    }
+
+    for (_, configs) in &configs_by_port {
+        let mut names = HashSet::new();
+        for config in configs {
+            if !names.insert(&config.server_name) {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Duplicate server_name '{}' for the same port", config.server_name),
+                ));
+            }
         }
     }
 

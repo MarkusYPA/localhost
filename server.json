@@ -42,19 +42,6 @@
           "autoindex": true
         }
       ]
-    },
-    {
-      "server_name": "site1.com",
-      "host": "127.0.0.1",
-      "ports": [8081],
-      "routes": [
-        {
-          "path": "/",
-          "methods": ["GET"],
-          "root": "./www/site1",
-          "index": "index.html"
-        }
-      ]
     }
   ]
 }

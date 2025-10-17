@@ -5,6 +5,7 @@ use crate::http::response::Response;
 use crate::session::Session;
 use std::fs;
 use std::path::Path;
+use uuid::Uuid;
 
 fn handle_error(status_code: u16, config: &SingleServerConfig) -> Response {
     if let Some(error_page_path_str) = config.error_pages.get(&status_code) {
@@ -62,8 +63,51 @@ pub fn handle_request(
 
     match request.method.as_str() {
         "GET" => handle_get(request, route, config, session),
+        "POST" => handle_post(request, route, config),
+        "DELETE" => handle_delete(request, route, config),
         _ => handle_error(501, config),
     }
+}
+
+fn handle_delete(request: &Request, route: &Route, config: &SingleServerConfig) -> Response {
+    let file_name = match request.path.strip_prefix(&route.path) {
+        Some(name) => name.trim_start_matches('/'),
+        None => return handle_error(400, config),
+    };
+
+    if file_name.is_empty() {
+        return handle_error(400, config);
+    }
+
+    let path = Path::new(&route.root).join(&file_name);
+
+    if !path.is_file() {
+        return handle_error(404, config);
+    }
+
+    if let Err(_) = fs::remove_file(&path) {
+        return handle_error(500, config);
+    }
+
+    Response::new(200, b"File deleted successfully".to_vec())
+}
+
+fn handle_post(request: &Request, route: &Route, config: &SingleServerConfig) -> Response {
+    let file_name = Uuid::new_v4().to_string();
+    let path = Path::new(&route.root).join(&file_name);
+
+    if let Err(_) = fs::create_dir_all(&route.root) {
+        return handle_error(500, config);
+    }
+
+    if let Err(_) = fs::write(&path, &request.body) {
+        return handle_error(500, config);
+    }
+
+    let file_url = format!("/uploads/{}", file_name);
+    let mut response = Response::new(201, file_url.as_bytes().to_vec());
+    response.headers.insert("Location".to_string(), file_url);
+    response
 }
 
 fn handle_get(

@@ -5,3 +5,13 @@ Use 'rustup default nightly' to switch to nightly build and 'rustup default stab
 - Should the static website include a favicon?
 
 - Figure out how to show POST in root and cgi stuff
+
+
+  You can run the server with this new configuration using:
+  cargo run -- --config comprehensive_server.json
+
+  Here's how to test each case:
+   - Standard Server: curl http://127.0.0.1:8080/ (serves from ./www/site)
+   - Virtual Host 1 (port 8081): curl --header "Host: site1.com" http://127.0.0.1:8081/ (serves from ./www/site1)
+   - Virtual Host 1 (port 8082): curl http://127.0.0.1:8082/ (serves from ./www/site1)
+   - Virtual Host 2: curl --header "Host: site2.com" http://127.0.0.1:8081/ (serves from ./www/site2)
