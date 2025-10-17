@@ -39,7 +39,7 @@ fn test_get_index() {
     let body = resp.text().unwrap();
     assert_eq!(
         body,
-        "<html><body><h1>Hello from index.html!</h1></body></html>"
+        "<html>\n\n<body>\n    <h1>Hello from index.html!</h1>\n</body>\n\n</html>"
     );
 }
 

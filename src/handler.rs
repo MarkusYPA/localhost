@@ -143,20 +143,27 @@ mod tests {
 
     fn basic_config() -> ServerConfig {
         let config_str = r#"
-server {
-    host: 127.0.0.1
-    port: 8080
-    route / {
-        methods: GET
-        root: /var/www
-        index: index.html
+{
+  "host": "127.0.0.1",
+  "ports": [8080],
+  "error_pages": {},
+  "client_max_body_size": 1048576,
+  "routes": [
+    {
+      "path": "/",
+      "methods": ["GET"],
+      "root": "/var/www",
+      "index": "index.html"
+    },
+    {
+      "path": "/api",
+      "methods": ["GET", "POST"],
+      "root": "/var/api"
     }
-    route /api {
-        methods: GET POST
-        root: /var/api
-    }
+  ]
 }
 "#;
+
         parse_config(config_str).unwrap()
     }
 
