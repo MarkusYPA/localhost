@@ -49,7 +49,8 @@
         {
           "path": "/uploads",
           "methods": ["GET"],
-          "root": "./www/uploads"
+          "root": "./www/uploads",
+          "autoindex": true
         },
         {
           "path": "/delete_test",

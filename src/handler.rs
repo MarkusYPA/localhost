@@ -141,7 +141,9 @@ fn handle_get(
         if index_path.is_file() {
             return serve_file(&index_path, config, Some(request));
         }
-        // TODO: Directory listing
+        if route.autoindex {
+            return list_directory(&path, &request.path, config, Some(request));
+        }
         return handle_error(403, config, Some(request));
     }
 
@@ -166,6 +168,29 @@ fn handle_get(
 
     println!("handle_get: 404 Not Found");
     handle_error(404, config, Some(request))
+}
+
+fn list_directory(path: &Path, request_path: &str, config: &SingleServerConfig, request: Option<&Request>) -> Response {
+    let mut body = String::new();
+    body.push_str(&format!("<html><body><h1>Index of {}</h1><ul>", request_path));
+
+    match fs::read_dir(path) {
+        Ok(entries) => {
+            for entry in entries {
+                if let Ok(entry) = entry {
+                    let file_name = entry.file_name().to_string_lossy().to_string();
+                    let link = format!("{}/{}", request_path.trim_end_matches('/'), file_name);
+                    body.push_str(&format!("<li><a href=\"{}\">{}</a></li>", link, file_name));
+                }
+            }
+        }
+        Err(_) => return handle_error(500, config, request),
+    }
+
+    body.push_str("</ul></body></html>");
+    let mut response = Response::new(200, body.as_bytes().to_vec());
+    response.headers.insert("Content-Type".to_string(), "text/html".to_string());
+    response
 }
 
 fn serve_file(path: &Path, config: &SingleServerConfig, request: Option<&Request>) -> Response {
