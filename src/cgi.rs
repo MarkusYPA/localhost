@@ -125,7 +125,7 @@ fn handle_cgi_internal(
             let content_type = to_cstring(
                 request
                     .headers
-                    .get("Content-Type")
+                    .get("content-type")
                     .map(|s| s.as_bytes())
                     .unwrap_or_default(),
             )?;

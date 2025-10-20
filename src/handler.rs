@@ -54,6 +54,42 @@ pub fn find_route<'a>(request: &Request, config: &'a SingleServerConfig) -> Opti
     best_match
 }
 
+fn try_handle_cgi(
+    request: &Request,
+    route: &Route,
+    config: &SingleServerConfig,
+    session: &mut Option<&mut Session>,
+) -> Option<Response> {
+    let relative_path = match request.path.strip_prefix(&route.path) {
+        Some(path) => path,
+        None => return None,
+    };
+    let relative_path = relative_path.strip_prefix('/').unwrap_or(relative_path);
+    let path = Path::new(&route.root).join(relative_path);
+
+    if path.is_file() {
+        if let Some(ext) = path.extension() {
+            let ext_str = match ext.to_str() {
+                Some(s) => format!(".{}", s),
+                None => return None,
+            };
+
+            if let Some(cgi_executor) = route.cgi_map.get(&ext_str) {
+                return Some(handle_cgi(
+                    request,
+                    route,
+                    config,
+                    &path,
+                    cgi_executor,
+                    session,
+                ));
+            }
+        }
+    }
+
+    None
+}
+
 pub fn handle_request(
     request: &Request,
     route: &Route,
@@ -62,6 +98,12 @@ pub fn handle_request(
 ) -> Response {
     if !route.methods.contains(&request.method) {
         return handle_error(405, config, Some(request));
+    }
+
+    if !route.cgi_map.is_empty() {
+        if let Some(response) = try_handle_cgi(request, route, config, session) {
+            return response;
+        }
     }
 
     match request.method.as_str() {
@@ -148,22 +190,7 @@ fn handle_get(
     }
 
     if path.is_file() {
-        if let Some(ext) = path.extension() {
-            let ext_str = match ext.to_str() {
-                Some(s) => format!(".{s}"),
-                None => return handle_error(400, config, Some(request)),
-            };
-
-            if let Some(cgi_executor) = route.cgi_map.get(&ext_str) {
-                return handle_cgi(request, route, config, &path, cgi_executor, session);
-            } else {
-                println!("handle_get: No CGI executor found for extension {ext:?}");
-                return serve_file(&path, config, Some(request));
-            }
-        } else {
-            println!("handle_get: No file extension found");
-            return serve_file(&path, config, Some(request));
-        }
+        return serve_file(&path, config, Some(request));
     }
 
     println!("handle_get: 404 Not Found");

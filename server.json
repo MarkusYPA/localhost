@@ -28,7 +28,7 @@
         },
         {
           "path": "/cgi-bin",
-          "methods": ["GET", "POST"],
+          "methods": ["GET", "POST", "DELETE"],
           "root": "./cgi-bin",
           "cgi_map": {
             ".py": "python3"
