@@ -1,6 +1,7 @@
 package go_tests
 
 import (
+	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -25,6 +26,44 @@ func TestComprehensiveServer(t *testing.T) {
 	t.Run("DeleteRequest", testDeleteRequest)
 	t.Run("DirectoryListing", testDirectoryListing)
 	t.Run("Timeout", testTimeout)
+	t.Run("ChunkedRequest", testChunkedRequest)
+}
+
+func testChunkedRequest(t *testing.T) {
+	pr, pw := io.Pipe()
+
+	go func() {
+		defer pw.Close()
+		chunks := []string{"Hello, ", "world!\n", "This is ", "a chunked ", "request."}
+		for _, chunk := range chunks {
+			_, err := pw.Write([]byte(chunk))
+			if err != nil {
+				t.Error("Error writing chunk data:", err)
+				return
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+	}()
+
+	req, err := http.NewRequest("POST", "http://127.0.0.1:8081/cgi-bin/echo.py", pr)
+	if err != nil {
+		t.Fatal("Error creating request:", err)
+	}
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal("Error sending request:", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Expected status code %d, got %d", http.StatusOK, resp.StatusCode)
+	}
+
+	body := readBody(t, resp)
+	expectedBody := "Hello, world!\nThis is a chunked request."
+	assertBodyContains(t, body, expectedBody)
 }
 
 func testPort8080_Localhost(t *testing.T) {
