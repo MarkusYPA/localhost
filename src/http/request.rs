@@ -60,9 +60,9 @@ impl<'a> From<&'a [u8]> for Request {
             }
             let mut parts = line.splitn(2, ": ");
             if let (Some(key), Some(value)) = (parts.next(), parts.next()) {
-                let header_key = key.to_string();
+                let header_key = key.to_lowercase();
                 let header_value = value.trim().to_string();
-                if header_key == "Cookie" {
+                if header_key == "cookie" {
                     for cookie_pair in header_value.split(';') {
                         let mut cookie_parts = cookie_pair.trim().splitn(2, '=');
                         if let (Some(cookie_name), Some(cookie_value)) =
@@ -78,7 +78,7 @@ impl<'a> From<&'a [u8]> for Request {
             }
         }
 
-        if let Some(content_length) = request.headers.get("Content-Length") {
+        if let Some(content_length) = request.headers.get("content-length") {
             if let Ok(length) = content_length.parse::<usize>() {
                 if header_end + length <= buffer.len() {
                     request.body = buffer[header_end..header_end + length].to_vec();
@@ -100,7 +100,7 @@ mod tests {
         let request = Request::from(request_str.as_ref());
         assert_eq!(request.method, "GET");
         assert_eq!(request.path, "/");
-        assert_eq!(request.headers.get("Host").unwrap(), "localhost");
+        assert_eq!(request.headers.get("host").unwrap(), "localhost");
     }
 
     #[test]
@@ -120,7 +120,7 @@ mod tests {
         let request = Request::from(request_str.as_ref());
         assert_eq!(request.method, "POST");
         assert_eq!(request.path, "/path");
-        assert_eq!(request.headers.get("Content-Length").unwrap(), "13");
+        assert_eq!(request.headers.get("content-length").unwrap(), "13");
         assert_eq!(request.body, b"Hello, world!");
     }
 

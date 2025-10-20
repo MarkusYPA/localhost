@@ -1,0 +1,30 @@
+{
+  "servers": [
+    {
+      "server_name": "test1.com",
+      "host": "127.0.0.1",
+      "ports": [8084],
+      "routes": [
+        {
+          "path": "/",
+          "methods": ["GET"],
+          "root": "./www/site1",
+          "index": "index.html"
+        }
+      ]
+    },
+    {
+      "server_name": "test2.com",
+      "host": "127.0.0.1",
+      "ports": [8084],
+      "routes": [
+        {
+          "path": "/",
+          "methods": ["GET"],
+          "root": "./www/site2",
+          "index": "index.html"
+        }
+      ]
+    }
+  ]
+}

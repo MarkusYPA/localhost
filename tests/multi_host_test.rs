@@ -1,0 +1,55 @@
+
+use http_server;
+use lazy_static::lazy_static;
+use std::sync::Once;
+use std::thread;
+use std::time::Duration;
+
+lazy_static! {
+    static ref SERVER_THREAD: thread::JoinHandle<()> = {
+        thread::spawn(|| {
+            if let Err(e) = http_server::run(Some("server_multi_host.json")) {
+                eprintln!("Server error: {}", e);
+                std::process::exit(1);
+            }
+        })
+    };
+}
+
+static START: Once = Once::new();
+
+fn setup() {
+    START.call_once(|| {
+        // force the lazy_static to be initialized
+        let _ = &*SERVER_THREAD;
+        // Give the server a moment to start
+        thread::sleep(Duration::from_secs(1));
+    });
+}
+
+#[test]
+fn test_multi_host() {
+    setup();
+
+    let client = reqwest::blocking::Client::new();
+
+    // Make a request to the first host
+    let resp1 = client
+        .get("http://127.0.0.1:8084/")
+        .header("Host", "test1.com")
+        .send()
+        .unwrap();
+    assert_eq!(resp1.status(), 200);
+    let body1 = resp1.text().unwrap();
+    assert!(body1.contains("Hello from site 1!"));
+
+    // Make a request to the second host
+    let resp2 = client
+        .get("http://127.0.0.1:8084/")
+        .header("Host", "test2.com")
+        .send()
+        .unwrap();
+    assert_eq!(resp2.status(), 200);
+    let body2 = resp2.text().unwrap();
+    assert!(body2.contains("Hello from site 2!"));
+}
