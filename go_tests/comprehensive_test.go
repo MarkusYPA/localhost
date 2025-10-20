@@ -38,21 +38,21 @@ func testPort8081_Site1(t *testing.T) {
 	resp := testHostRequest(t, "http://127.0.0.1:8081/", "site1.com", http.StatusOK)
 	defer resp.Body.Close()
 	body := readBody(t, resp)
-	assertBodyContains(t, body, "<h1>This is site 1</h1>")
+	assertBodyContains(t, body, "<html><body><h1>Hello from site 1!</h1></body></html>")
 }
 
 func testPort8081_Site2(t *testing.T) {
 	resp := testHostRequest(t, "http://127.0.0.1:8081/", "site2.com", http.StatusOK)
 	defer resp.Body.Close()
 	body := readBody(t, resp)
-	assertBodyContains(t, body, "<h1>This is site 2</h1>")
+	assertBodyContains(t, body, "<html><body><h1>Hello from site 2!</h1></body></html>")
 }
 
 func testPort8082_Site1(t *testing.T) {
 	resp := testGetRequest(t, "http://127.0.0.1:8082/", http.StatusOK)
 	defer resp.Body.Close()
 	body := readBody(t, resp)
-	assertBodyContains(t, body, "<h1>This is site 1</h1>")
+	assertBodyContains(t, body, "<html><body><h1>Hello from site 1!</h1></body></html>")
 }
 
 func testNotFound(t *testing.T) {
