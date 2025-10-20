@@ -147,6 +147,14 @@ Integration tests are located in the `tests/` directory and verify the server's 
 cargo test --test integration_test
 ```
 
+### Golang tests
+
+In order to make sure the auditor can check tests behavior, some tests are written on Golang. To run tests:
+```bash
+cd go_tests/
+go test
+```
+
 ### Memory Leak Testing (macOS)
 
 On macOS, `valgrind` is not well-supported. Instead, you can use AddressSanitizer (ASan), which is built into the Rust compiler.
