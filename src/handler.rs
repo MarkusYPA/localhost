@@ -108,8 +108,12 @@ pub fn handle_request(
 
     match request.method.as_str() {
         "GET" => handle_get(request, route, config, session),
-        "POST" => handle_post(request, route, config),
-        "DELETE" => handle_delete(request, route, config),
+        "POST" | "DELETE" => {
+            if let Some(response) = try_handle_cgi(request, route, config, session) {
+                return response;
+            }
+            handle_error(405, config, Some(request))
+        }
         _ => handle_error(501, config, Some(request)),
     }
 }
@@ -326,8 +330,8 @@ mod tests {
             cookies: HashMap::new(),
         };
         let route = find_route(&request, &config).unwrap();
-        // This test is not perfect, as it doesn't check the file system.
-        // However, it ensures that the path is correctly joined.
+        // This test is not perfect, as it doesn't check the file system.>
+        // However, it ensures that the path is correctly joined.>
         let relative_path = request.path.strip_prefix(&route.path).unwrap();
         let relative_path = relative_path.strip_prefix('/').unwrap_or(relative_path);
         let path = Path::new(&route.root).join(relative_path);

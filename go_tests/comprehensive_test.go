@@ -143,7 +143,7 @@ func testCustomErrorPage(t *testing.T) {
 func testClientBodySizeLimit(t *testing.T) {
 	// Test body larger than limit
 	largeBody := strings.NewReader("12345678901")
-	resp, err := http.Post("http://localhost:8083/", "text/plain", largeBody)
+	resp, err := http.Post("http://127.0.0.1:8083/cgi-bin/echo.py", "text/plain", largeBody)
 	if err != nil {
 		t.Fatalf("Failed to send request: %v", err)
 	}
@@ -155,14 +155,14 @@ func testClientBodySizeLimit(t *testing.T) {
 
 	// Test body smaller than limit
 	smallBody := strings.NewReader("12345")
-	resp, err = http.Post("http://localhost:8083/", "text/plain", smallBody)
+	resp, err = http.Post("http://127.0.0.1:8083/cgi-bin/echo.py", "text/plain", smallBody)
 	if err != nil {
 		t.Fatalf("Failed to send request: %v", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusCreated {
-		t.Errorf("Expected status code %d, got %d", http.StatusCreated, resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Expected status code %d, got %d", http.StatusOK, resp.StatusCode)
 	}
 }
 
