@@ -100,7 +100,7 @@ mod tests {
         let request = Request::from(request_str.as_ref());
         assert_eq!(request.method, "GET");
         assert_eq!(request.path, "/");
-        assert_eq!(request.headers.get("Host").unwrap(), "localhost");
+        assert_eq!(request.headers.get("host").unwrap(), "localhost");
     }
 
     #[test]
@@ -120,7 +120,7 @@ mod tests {
         let request = Request::from(request_str.as_ref());
         assert_eq!(request.method, "POST");
         assert_eq!(request.path, "/path");
-        assert_eq!(request.headers.get("Content-Length").unwrap(), "13");
+        assert_eq!(request.headers.get("content-length").unwrap(), "13");
         assert_eq!(request.body, b"Hello, world!");
     }
 
