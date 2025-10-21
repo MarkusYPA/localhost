@@ -11,7 +11,7 @@ impl Response {
     pub fn new(status_code: u16, body: Vec<u8>) -> Self {
         let mut headers = HashMap::new();
         headers.insert("Content-Length".to_string(), body.len().to_string());
-        headers.insert("Connection".to_string(), "close".to_string());
+        headers.insert("Connection".to_string(), "keep-alive".to_string());
 
         Response {
             status_code,
