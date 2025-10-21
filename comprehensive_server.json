@@ -10,6 +10,14 @@
           "methods": ["GET"],
           "root": "./www/site1",
           "index": "index.html"
+        },
+        {
+          "path": "/cgi-bin",
+          "methods": ["GET", "POST", "DELETE"],
+          "root": "./cgi-bin",
+          "cgi_map": {
+            ".py": "python3"
+          }
         }
       ]
     },
@@ -74,6 +82,14 @@
           "path": "/",
           "methods": ["POST"],
           "root": "./www/uploads"
+        },
+        {
+          "path": "/cgi-bin",
+          "methods": ["GET", "POST", "DELETE"],
+          "root": "./cgi-bin",
+          "cgi_map": {
+            ".py": "python3"
+          }
         }
       ]
     }

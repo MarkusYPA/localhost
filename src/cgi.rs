@@ -125,7 +125,7 @@ fn handle_cgi_internal(
             let content_type = to_cstring(
                 request
                     .headers
-                    .get("Content-Type")
+                    .get("content-type")
                     .map(|s| s.as_bytes())
                     .unwrap_or_default(),
             )?;
@@ -225,8 +225,16 @@ fn handle_cgi_internal(
                 .into_bytes();
 
             // Create a new HTTP response from the CGI output
-            let mut response = Response::new(200, body);
-            // Add headers parsed from CGI output to the HTTP response
+            let mut status_code = 200;
+            if let Some(status_header) = headers.remove("Status") {
+                if let Some(code_str) = status_header.split_whitespace().next() {
+                    if let Ok(code) = code_str.parse::<u16>() {
+                        status_code = code;
+                    }
+                }
+            }
+
+            let mut response = Response::new(status_code, body);
             for (key, value) in headers {
                 response.headers.insert(key, value);
             }

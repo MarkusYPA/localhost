@@ -5,7 +5,6 @@ use crate::http::response::Response;
 use crate::session::Session;
 use std::fs;
 use std::path::Path;
-use uuid::Uuid;
 
 fn handle_error(status_code: u16, config: &SingleServerConfig, request: Option<&Request>) -> Response {
     if let Some(req) = request {
@@ -54,6 +53,42 @@ pub fn find_route<'a>(request: &Request, config: &'a SingleServerConfig) -> Opti
     best_match
 }
 
+fn try_handle_cgi(
+    request: &Request,
+    route: &Route,
+    config: &SingleServerConfig,
+    session: &mut Option<&mut Session>,
+) -> Option<Response> {
+    let relative_path = match request.path.strip_prefix(&route.path) {
+        Some(path) => path,
+        None => return None,
+    };
+    let relative_path = relative_path.strip_prefix('/').unwrap_or(relative_path);
+    let path = Path::new(&route.root).join(relative_path);
+
+    if path.is_file() {
+        if let Some(ext) = path.extension() {
+            let ext_str = match ext.to_str() {
+                Some(s) => format!(".{}", s),
+                None => return None,
+            };
+
+            if let Some(cgi_executor) = route.cgi_map.get(&ext_str) {
+                return Some(handle_cgi(
+                    request,
+                    route,
+                    config,
+                    &path,
+                    cgi_executor,
+                    session,
+                ));
+            }
+        }
+    }
+
+    None
+}
+
 pub fn handle_request(
     request: &Request,
     route: &Route,
@@ -64,53 +99,22 @@ pub fn handle_request(
         return handle_error(405, config, Some(request));
     }
 
+    if !route.cgi_map.is_empty() {
+        if let Some(response) = try_handle_cgi(request, route, config, session) {
+            return response;
+        }
+    }
+
     match request.method.as_str() {
         "GET" => handle_get(request, route, config, session),
-        "POST" => handle_post(request, route, config),
-        "DELETE" => handle_delete(request, route, config),
+        "POST" | "DELETE" => {
+            if let Some(response) = try_handle_cgi(request, route, config, session) {
+                return response;
+            }
+            handle_error(405, config, Some(request))
+        }
         _ => handle_error(501, config, Some(request)),
     }
-}
-
-fn handle_delete(request: &Request, route: &Route, config: &SingleServerConfig) -> Response {
-    let file_name = match request.path.strip_prefix(&route.path) {
-        Some(name) => name.trim_start_matches('/'),
-        None => return handle_error(400, config, Some(request)),
-    };
-
-    if file_name.is_empty() {
-        return handle_error(400, config, Some(request));
-    }
-
-    let path = Path::new(&route.root).join(&file_name);
-
-    if !path.is_file() {
-        return handle_error(404, config, Some(request));
-    }
-
-    if let Err(_) = fs::remove_file(&path) {
-        return handle_error(500, config, Some(request));
-    }
-
-    Response::new(200, b"File deleted successfully".to_vec())
-}
-
-fn handle_post(request: &Request, route: &Route, config: &SingleServerConfig) -> Response {
-    let file_name = Uuid::new_v4().to_string();
-    let path = Path::new(&route.root).join(&file_name);
-
-    if let Err(_) = fs::create_dir_all(&route.root) {
-        return handle_error(500, config, Some(request));
-    }
-
-    if let Err(_) = fs::write(&path, &request.body) {
-        return handle_error(500, config, Some(request));
-    }
-
-    let file_url = format!("/uploads/{}", file_name);
-    let mut response = Response::new(201, file_url.as_bytes().to_vec());
-    response.headers.insert("Location".to_string(), file_url);
-    response
 }
 
 fn handle_get(
@@ -148,22 +152,7 @@ fn handle_get(
     }
 
     if path.is_file() {
-        if let Some(ext) = path.extension() {
-            let ext_str = match ext.to_str() {
-                Some(s) => format!(".{s}"),
-                None => return handle_error(400, config, Some(request)),
-            };
-
-            if let Some(cgi_executor) = route.cgi_map.get(&ext_str) {
-                return handle_cgi(request, route, config, &path, cgi_executor, session);
-            } else {
-                println!("handle_get: No CGI executor found for extension {ext:?}");
-                return serve_file(&path, config, Some(request));
-            }
-        } else {
-            println!("handle_get: No file extension found");
-            return serve_file(&path, config, Some(request));
-        }
+        return serve_file(&path, config, Some(request));
     }
 
     println!("handle_get: 404 Not Found");
@@ -299,8 +288,8 @@ mod tests {
             cookies: HashMap::new(),
         };
         let route = find_route(&request, &config).unwrap();
-        // This test is not perfect, as it doesn't check the file system.
-        // However, it ensures that the path is correctly joined.
+        // This test is not perfect, as it doesn't check the file system.>
+        // However, it ensures that the path is correctly joined.>
         let relative_path = request.path.strip_prefix(&route.path).unwrap();
         let relative_path = relative_path.strip_prefix('/').unwrap_or(relative_path);
         let path = Path::new(&route.root).join(relative_path);

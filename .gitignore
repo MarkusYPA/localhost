@@ -1,3 +1,4 @@
 /target
 /www/uploads/*
 !/www/uploads/.gitkeep
+*.log
