@@ -165,14 +165,14 @@ go test
 
 ### Incorrect cofiguration test
 
-Test didicated to prove web server can isolate configuration errors — ensuring that one bad virtual host or configuration block doesn’t crash or disable the entire process
+Test for configuration errors — one bad virtual host or configuration block shouldn't crash or disable the entire process
 
 Start the server in the terminal with specifying test_configs folder:
 ```bash
 cargo run --release -- --config test_configs/
 ```
 
-The following output is expected, proving that failed configs does nott crash the entire process:
+The following output is expected, showing that failed configs do not crash the entire process:
 
 ```
 Successfully loaded config: server.json
