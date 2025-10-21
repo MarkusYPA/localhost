@@ -33,10 +33,7 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
         let mut names = HashSet::new();
         for config in configs {
             if !names.insert(&config.server_name) {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Duplicate server_name '{}' for the same port", config.server_name),
-                ));
+                eprintln!("Warning: Duplicate server_name '{}' found for the same port. The first defined server will be used.", config.server_name);
             }
         }
     }

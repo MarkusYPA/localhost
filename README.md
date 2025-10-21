@@ -47,61 +47,46 @@ This project implements a single-threaded, non-blocking HTTP/1.1 server in Rust,
 
 ## Configuration
 
-The server's behavior is defined by the `server.conf` file. Here's an example of the configuration format:
+The server's behavior is defined by one or more JSON configuration files. These files specify server blocks, hosts, ports, routes, error pages, and more.
 
-```
-server {
-    host: 127.0.0.1
-    port: 8081
-    server_name: localhost
-    error_page_404: /errors/404.html
-    error_page_400: /errors/400.html
-    error_page_403: /errors/403.html
-    error_page_405: /errors/405.html
-    error_page_413: /errors/413.html
-    error_page_500: /errors/500.html
-    client_max_body_size: 1048576
-    
-    route / {
-        methods: GET POST
-        root: ./www
-        index: index.html
-        autoindex: on
-    }
-    
-    route /upload {
-        methods: POST
-        root: /var/uploads
-    }
-    
-    route /cgi-bin {
-        methods: GET POST
-        root: ./cgi-bin
-        cgi_extension: .py python3
-    }
+Here's an example of a JSON configuration file:
 
-    route /site {
-        methods: GET
-        root: ./www/site
-        index: index.html
-        autoindex: on
+```json
+{
+  "servers": [
+    {
+      "server_name": "localhost",
+      "host": "127.0.0.1",
+      "ports": [8080],
+      "client_max_body_size": 1024,
+      "routes": [
+        {
+          "path": "/",
+          "methods": ["GET"],
+          "root": "www",
+          "index": "index.html"
+        }
+      ]
     }
+  ]
 }
 ```
 
 ### Configuration Directives
 
--   `host`: The IP address the server will bind to.
--   `port`: One or more ports the server will listen on.
+-   `servers`: An array of server block configurations.
 -   `server_name`: The server name (e.g., `localhost`).
--   `error_page_<STATUS_CODE>`: Path to custom error pages (e.g., `error_page_404: /errors/404.html`).
+-   `host`: The IP address the server will bind to.
+-   `ports`: An array of ports the server will listen on.
+-   `error_pages`: A map of HTTP status codes to custom error page paths (e.g., `"404": "/errors/404.html"`).
 -   `client_max_body_size`: Maximum allowed size for client request bodies in bytes.
--   `route <PATH> { ... }`: Defines a route block with the following directives:
-    -   `methods`: Space-separated list of allowed HTTP methods (e.g., `GET POST`).
+-   `routes`: An array of route configurations.
+    -   `path`: The URL path for the route.
+    -   `methods`: An array of allowed HTTP methods (e.g., `["GET", "POST"]`).
     -   `root`: Filesystem path to serve content from for this route.
     -   `index`: Default file to serve if the URL is a directory (e.g., `index.html`).
-    -   `autoindex`: `on` or `off` to enable/disable directory listing.
-    -   `cgi_extension`: Associates a file extension with a CGI executor (e.g., `.py python3`).
+    -   `autoindex`: `true` or `false` to enable/disable directory listing.
+    -   `cgi_map`: A map associating file extensions with CGI executors (e.g., `{".py": "python3"}`).
 
 ## Usage
 
@@ -127,7 +112,23 @@ To run the server:
 cargo run
 ```
 
-The server will load its configuration from `server.conf` in the project root.
+By default, the server will attempt to load configuration files from a directory named `config` in the project root. You can specify a different configuration source using the `--config` flag:
+
+-   **To load configurations from a directory (e.g., `my_configs/`):**
+
+    ```bash
+    cargo run -- --config my_configs/
+    ```
+
+    The server will attempt to load all `.json` files within the specified directory. Invalid configuration files will be logged as errors, but the server will continue to load valid ones.
+
+-   **To load a single configuration file (e.g., `server.json`):**
+
+    ```bash
+    cargo run -- --config comprehensive_server.json
+    ```
+
+    The server will load only the specified `.json` file. If the file is invalid, the server will exit with an error.
 
 ## Testing
 
@@ -160,6 +161,27 @@ Run tests in another terminal:
 ```bash
 cd go_tests/
 go test
+```
+
+### Incorrect cofiguration test
+
+Test didicated to prove web server can isolate configuration errors — ensuring that one bad virtual host or configuration block doesn’t crash or disable the entire process
+
+Start the server in the terminal with specifying test_configs folder:
+```bash
+cargo run --release -- --config test_configs/
+```
+
+The following output is expected, proving that failed configs does nott crash the entire process:
+
+```
+Successfully loaded config: server.json
+Error parsing config file invalid_config.json: invalid type: string "client_max_body_size", expected u16 at line 7 column 28
+Successfully loaded config: duplicate_server.json
+Warning: Duplicate server_name 'localhost' found for the same port. The first defined server will be used.
+Server listening on 127.0.0.1:8090
+Server listening on 127.0.0.1:8081
+Server initialized, waiting for events...
 ```
 
 ### Memory Leak Testing (macOS)
