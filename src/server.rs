@@ -15,15 +15,17 @@ use uuid::Uuid;
 const CONNECTION_TIMEOUT_SECS: u64 = 2;
 const MAX_CONNECTIONS: usize = 100;
 
-pub fn run(config: ServerConfig) -> std::io::Result<()> {
+pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
     // --- Setup listeners ---
     let mut configs_by_port = HashMap::<u16, Vec<SingleServerConfig>>::new();
-    for server_config in &config.servers {
-        for port in &server_config.ports {
-            configs_by_port
-                .entry(*port)
-                .or_default()
-                .push(server_config.clone());
+    for config in &all_configs {
+        for server_config in &config.servers {
+            for port in &server_config.ports {
+                configs_by_port
+                    .entry(*port)
+                    .or_default()
+                    .push(server_config.clone());
+            }
         }
     }
 

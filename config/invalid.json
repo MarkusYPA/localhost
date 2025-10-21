@@ -1,0 +1,18 @@
+{
+  "servers": [
+    {
+      "server_name": "bad_server",
+      "host": "127.0.0.1",
+      "ports": [8081,
+      "client_max_body_size": 1024,
+      "routes": [
+        {
+          "path": "/",
+          "methods": ["GET"],
+          "root": "www",
+          "index": "index.html"
+        }
+      ]
+    }
+  ]
+}
