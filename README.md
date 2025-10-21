@@ -149,7 +149,14 @@ cargo test --test integration_test
 
 ### Golang tests
 
-In order to make sure the auditor can check tests behavior, some tests are written on Golang. To run tests:
+In order to make sure the auditor can check tests behavior, some tests are written on Golang.
+
+Start the server in one terminal with the comprehensive configuration:
+```bash
+cargo run --release -- --config comprehensive_server.json
+```
+
+Run tests in another terminal:
 ```bash
 cd go_tests/
 go test
