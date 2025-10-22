@@ -4,6 +4,7 @@
       "server_name": "site1.com",
       "host": "127.0.0.1",
       "ports": [8081, 8082],
+      "connection_type": "close",
       "routes": [
         {
           "path": "/",

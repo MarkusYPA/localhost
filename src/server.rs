@@ -181,6 +181,7 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                                         let response = crate::http::response::Response::new(
                                             413,
                                             b"Payload Too Large".to_vec(),
+                                            server_config.connection_type.clone(),
                                         );
                                         let _ = stream_owner.write_all(&response.to_bytes());
                                     } else {
@@ -234,6 +235,7 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                                                 None => crate::http::response::Response::new(
                                                     404,
                                                     b"Not Found".to_vec(),
+                                                    server_config.connection_type.clone(),
                                                 ),
                                             }
                                         };
@@ -246,7 +248,11 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                                     std::mem::forget(stream_owner);
                                 }
                                 Err(_) => {
-                                    let response = crate::http::response::Response::new(400, b"Bad Request".to_vec());
+                                    let response = crate::http::response::Response::new(
+                                        400,
+                                        b"Bad Request".to_vec(),
+                                        server_configs[0].connection_type.clone(),
+                                    );
                                     let _ = stream_owner.write_all(&response.to_bytes());
                                     client_server_configs.remove(&fd);
                                     connection_buffers.remove(&fd);

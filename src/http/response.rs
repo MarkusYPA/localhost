@@ -8,10 +8,10 @@ pub struct Response {
 }
 
 impl Response {
-    pub fn new(status_code: u16, body: Vec<u8>) -> Self {
+    pub fn new(status_code: u16, body: Vec<u8>, connection_type: String) -> Self {
         let mut headers = HashMap::new();
         headers.insert("Content-Length".to_string(), body.len().to_string());
-        headers.insert("Connection".to_string(), "keep-alive".to_string());
+        headers.insert("Connection".to_string(), connection_type);
 
         Response {
             status_code,

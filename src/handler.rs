@@ -13,7 +13,7 @@ fn handle_error(status_code: u16, config: &SingleServerConfig, request: Option<&
     if let Some(error_page_path_str) = config.error_pages.get(&status_code) {
         let current_dir = match std::env::current_dir() {
             Ok(dir) => dir,
-            Err(_) => return Response::new(500, b"Internal Server Error".to_vec()),
+            Err(_) => return Response::new(500, b"Internal Server Error".to_vec(), config.connection_type.clone()),
         };
         let error_page_path = current_dir.join(
             error_page_path_str
@@ -22,7 +22,7 @@ fn handle_error(status_code: u16, config: &SingleServerConfig, request: Option<&
         );
         match fs::read(&error_page_path) {
             Ok(body) => {
-                let mut response = Response::new(status_code, body);
+                let mut response = Response::new(status_code, body, config.connection_type.clone());
                 response
                     .headers
                     .insert("Content-Type".to_string(), "text/html".to_string());
@@ -30,12 +30,12 @@ fn handle_error(status_code: u16, config: &SingleServerConfig, request: Option<&
             }
             Err(_) => {
                 let reason_phrase = crate::http::status::reason_phrase(status_code);
-                Response::new(status_code, reason_phrase.as_bytes().to_vec())
+                Response::new(status_code, reason_phrase.as_bytes().to_vec(), config.connection_type.clone())
             }
         }
     } else {
         let reason_phrase = crate::http::status::reason_phrase(status_code);
-        Response::new(status_code, reason_phrase.as_bytes().to_vec())
+        Response::new(status_code, reason_phrase.as_bytes().to_vec(), config.connection_type.clone())
     }
 }
 
@@ -177,7 +177,7 @@ fn list_directory(path: &Path, request_path: &str, config: &SingleServerConfig, 
     }
 
     body.push_str("</ul></body></html>");
-    let mut response = Response::new(200, body.as_bytes().to_vec());
+    let mut response = Response::new(200, body.as_bytes().to_vec(), config.connection_type.clone());
     response.headers.insert("Content-Type".to_string(), "text/html".to_string());
     response
 }
@@ -185,7 +185,7 @@ fn list_directory(path: &Path, request_path: &str, config: &SingleServerConfig, 
 fn serve_file(path: &Path, config: &SingleServerConfig, request: Option<&Request>) -> Response {
     match fs::read(path) {
         Ok(body) => {
-            let mut response = Response::new(200, body);
+            let mut response = Response::new(200, body, config.connection_type.clone());
             let content_type = mime_guess::from_path(path).first_or_octet_stream();
             response
                 .headers
