@@ -242,7 +242,7 @@ func testDeleteRequest(t *testing.T) {
 	body := strings.NewReader(form.Encode())
 
 	// Create the request
-	req, err := http.NewRequest("POST", "http://127.0.0.1:8081/cgi-bin/delete.py", body)
+	req, err := http.NewRequest("DELETE", "http://127.0.0.1:8081/cgi-bin/delete.py", body)
 	if err != nil {
 		t.Fatalf("Failed to create request: %v", err)
 	}
