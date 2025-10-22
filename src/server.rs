@@ -91,10 +91,26 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                 guard.clean_expired_sessions();
             }
         }
+        
+        // --- Check for connection timeouts ---
+        let now = Instant::now();
+        connections_activity.retain(|&fd, last_activity| {
+            if now.duration_since(*last_activity).as_secs() > CONNECTION_TIMEOUT_SECS {
+                println!("Client fd {} timed out, closing", fd);
+                unsafe {
+                    libc::close(fd);
+                    client_server_configs.remove(&fd);
+                    connection_buffers.remove(&fd);
+                }
+                false // Remove from map
+            } else {
+                true // Keep in map
+            }
+        });
 
         let mut events: [libc::kevent; 16] = unsafe { std::mem::zeroed() };
 
-        let nev = kqueue::kevent(kq, &[], &mut events, Some(Duration::from_secs(5)))?;
+        let nev = kqueue::kevent(kq, &[], &mut events, Some(Duration::from_millis(100)))?;
         if nev == 0 {
             continue; // timeout — loop again
         }
@@ -149,11 +165,11 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                             connection_buffers.remove(&fd);
                         }
                         Ok(n) => {
-                            connections_activity.insert(fd, Instant::now());
                             buffer.extend_from_slice(&chunk[..n]);
 
                             match crate::http::request::parse_request_from_buffer(buffer) {
                                 Ok(Some((request, consumed))) => {
+                                    connections_activity.insert(fd, Instant::now());
                                     let host = request.headers.get("host").map(|s| s.as_str()).unwrap_or("");
                                     let host_without_port = host.split(':').next().unwrap_or("");
                                     let server_config = server_configs
@@ -255,21 +271,5 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                 }
             }
         }
-
-        // --- Check for connection timeouts ---
-        let now = Instant::now();
-        connections_activity.retain(|&fd, last_activity| {
-            if now.duration_since(*last_activity).as_secs() > CONNECTION_TIMEOUT_SECS {
-                println!("Client fd {} timed out, closing", fd);
-                unsafe {
-                    libc::close(fd);
-                    client_server_configs.remove(&fd);
-                    connection_buffers.remove(&fd);
-                }
-                false // Remove from map
-            } else {
-                true // Keep in map
-            }
-        });
     }
 }

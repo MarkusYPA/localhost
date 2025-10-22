@@ -4,6 +4,7 @@ import (
 	"io"
 	"io/ioutil"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -26,8 +27,8 @@ func TestComprehensiveServer(t *testing.T) {
 	t.Run("FileUploadAndDownload", testFileUploadAndDownload)
 	t.Run("DeleteRequest", testDeleteRequest)
 	t.Run("DirectoryListing", testDirectoryListing)
-	// t.Run("Timeout", testTimeout)
 	t.Run("ChunkedRequest", testChunkedRequest)
+	t.Run("Timeout", testTimeout)
 }
 
 func testChunkedRequest(t *testing.T) {
@@ -271,20 +272,48 @@ func testDirectoryListing(t *testing.T) {
 	resp.Body.Close()
 }
 
-/* func testTimeout(t *testing.T) {
-	conn, err := net.Dial("tcp", "localhost:8080")
+func testTimeout(t *testing.T) {
+	addr := "127.0.0.1:8080" // use 127.0.0.1 to avoid DNS
+	// Open raw TCP connection (no http.Client timeouts)
+	conn, err := net.Dial("tcp", addr)
 	if err != nil {
-		t.Fatalf("Failed to connect to server: %v", err)
+		t.Fatalf("failed to connect to %s: %v", addr, err)
 	}
 	defer conn.Close()
 
-	time.Sleep(3 * time.Second)
+	// Wait longer than the server idle timeout (server is expected to close at ~2s)
+	wait := 4 * time.Second
+	t.Logf("connected -> sleeping %v (expect server to close)...", wait)
+	time.Sleep(wait)
 
-	_, err = conn.Write([]byte("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n"))
-	if err == nil {
-		t.Errorf("Expected a write error after timeout, but got none")
+	// Now try a non-blocking read to see if server closed the connection.
+	// Set a short read deadline only for this read so we don't block forever.
+	if err := conn.SetReadDeadline(time.Now().Add(1 * time.Second)); err != nil {
+		t.Fatalf("SetReadDeadline failed: %v", err)
 	}
-} */
+
+	buf := make([]byte, 1)
+	n, err := conn.Read(buf)
+	if err == nil {
+		// If we read bytes with no error, connection is still alive.
+		t.Fatalf("expected server to have closed the connection, but read %d bytes and no error", n)
+	}
+
+	// If server closed, Read commonly returns io.EOF (or underlying error).
+	if err == io.EOF {
+		t.Logf("server closed the connection (EOF) as expected")
+		return
+	}
+
+	// If we get a timeout error on Read, it means server didn't send FIN; connection likely still alive.
+	// Check for timeout (net.Error Timeout())
+	if ne, ok := err.(net.Error); ok && ne.Timeout() {
+		t.Fatalf("read timed out: server did NOT close connection within expected time; err=%v", err)
+	}
+
+	// Any other error is treated as server closed (or something else happened).
+	t.Fatalf("unexpected read error: %v", err)
+}
 
 // Helper functions
 
