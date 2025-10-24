@@ -2,3 +2,4 @@
 /www/uploads/*
 !/www/uploads/.gitkeep
 *.log
+.DS_Store
