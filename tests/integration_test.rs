@@ -101,6 +101,16 @@ fn test_routing() {
 }
 
 #[test]
+fn test_bash_cgi() {
+    setup();
+    // Test the /cgi-bin/ route
+    let resp = reqwest::blocking::get("http://127.0.0.1:8081/cgi-bin/hello.sh").unwrap();
+    assert_eq!(resp.status(), 200);
+    let body = resp.text().unwrap();
+    assert!(body.contains("<h1>Hello from Bash CGI!</h1>"));
+}
+
+#[test]
 fn test_method_not_allowed() {
     setup();
 
