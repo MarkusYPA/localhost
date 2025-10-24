@@ -6,7 +6,9 @@ use std::ffi::CString;
 use std::io::{Read, Write};
 use std::os::fd::FromRawFd;
 use std::path::Path;
+use std::time::Duration;
 
+use crate::io::kqueue::wait_for_pid;
 use crate::session::Session;
 
 /// Converts a Rust string slice to a CString, handling potential null bytes.
@@ -187,6 +189,34 @@ fn handle_cgi_internal(
             }
             drop(stdin_writer); // Close stdin pipe for CGI, signaling EOF to the child
 
+            // Wait for the child process to exit and get its status
+            let timeout = Duration::from_millis(config.cgi_timeout);
+            match wait_for_pid(pid, timeout) {
+                Ok(true) => {
+                    // Child process exited in time
+                    let mut status = 0;
+                    libc::waitpid(pid, &mut status, 0);
+                }
+                Ok(false) => {
+                    // Child process timed out
+                    libc::kill(pid, libc::SIGKILL);
+                    libc::waitpid(pid, &mut 0, 0); // Clean up the zombie process
+                    return Err(Response::new(
+                        504,
+                        b"CGI Error: Script timed out".to_vec(),
+                        config.connection_type.clone(),
+                    ));
+                }
+                Err(e) => {
+                    // Error waiting for child process
+                    return Err(Response::new(
+                        500,
+                        format!("CGI Error: Failed to wait for child process: {e}").into_bytes(),
+                        config.connection_type.clone(),
+                    ));
+                }
+            }
+
             // Read the CGI script's stdout
             let mut cgi_output = Vec::new();
             // Error handling for read operation
@@ -195,10 +225,6 @@ fn handle_cgi_internal(
                 eprintln!("CGI Parent: Error reading from stdout pipe: {e}");
             }
             drop(stdout_reader); // Close stdout pipe for CGI
-
-            // Wait for the child process to exit and get its status
-            let mut status = 0;
-            libc::waitpid(pid, &mut status, 0);
 
             // Parse the CGI script's output into an HTTP response
             let cgi_output_str = String::from_utf8_lossy(&cgi_output);

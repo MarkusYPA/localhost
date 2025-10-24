@@ -51,3 +51,22 @@ pub fn kevent(
         Ok(ret)
     }
 }
+
+pub fn wait_for_pid(pid: i32, timeout: Duration) -> Result<bool, std::io::Error> {
+    let kq = kqueue()?;
+    let event = libc::kevent {
+        ident: pid as usize,
+        filter: libc::EVFILT_PROC,
+        flags: libc::EV_ADD | libc::EV_ONESHOT,
+        fflags: libc::NOTE_EXIT,
+        data: 0,
+        udata: std::ptr::null_mut(),
+    };
+
+    let mut events = [libc::kevent { ..event }];
+    let result = kevent(kq, &[event], &mut events, Some(timeout))?;
+
+    unsafe { libc::close(kq) };
+
+    Ok(result > 0)
+}
