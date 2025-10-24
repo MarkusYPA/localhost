@@ -16,10 +16,16 @@ pub struct SingleServerConfig {
     pub error_pages: HashMap<u16, String>,
     #[serde(default = "default_client_max_body_size")]
     pub client_max_body_size: usize,
+    #[serde(default = "default_connection_type")]
+    pub connection_type: String,
 }
 
 fn default_client_max_body_size() -> usize {
     1024 * 1024 // 1MB
+}
+
+fn default_connection_type() -> String {
+    "keep-alive".to_string()
 }
 
 #[derive(Debug, Deserialize, Clone)]

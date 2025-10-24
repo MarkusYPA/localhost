@@ -14,7 +14,7 @@ use crate::session::Session;
 /// response if the conversion fails.
 fn to_cstring<S: AsRef<[u8]>>(s: S) -> Result<CString, Response> {
     CString::new(s.as_ref())
-        .map_err(|_| Response::new(500, b"Internal Server Error: Invalid CString".to_vec()))
+        .map_err(|_| Response::new(500, b"Internal Server Error: Invalid CString".to_vec(), "close".to_string()))
 }
 
 pub fn handle_cgi(
@@ -38,7 +38,7 @@ pub fn handle_cgi(
 fn handle_cgi_internal(
     request: &Request,
     _route: &Route,
-    _config: &SingleServerConfig,
+    config: &SingleServerConfig,
     cgi_path: &Path,
     cgi_executor: &str,
     _session: &mut Option<&mut Session>,
@@ -54,6 +54,7 @@ fn handle_cgi_internal(
         return Err(Response::new(
             500,
             b"CGI Error: Failed to create stdin pipe".to_vec(),
+            config.connection_type.clone(),
         ));
     }
     // Create stdout pipe for the CGI process
@@ -66,6 +67,7 @@ fn handle_cgi_internal(
         return Err(Response::new(
             500,
             b"CGI Error: Failed to create stdout pipe".to_vec(),
+            config.connection_type.clone(),
         ));
     }
 
@@ -83,6 +85,7 @@ fn handle_cgi_internal(
         Err(Response::new(
             500,
             b"CGI Error: Failed to fork process".to_vec(),
+            config.connection_type.clone(),
         ))
     } else if pid == 0 {
         // Child process: This is where the CGI script will be executed.
@@ -234,7 +237,7 @@ fn handle_cgi_internal(
                 }
             }
 
-            let mut response = Response::new(status_code, body);
+            let mut response = Response::new(status_code, body, config.connection_type.clone());
             for (key, value) in headers {
                 response.headers.insert(key, value);
             }

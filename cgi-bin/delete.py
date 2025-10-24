@@ -13,6 +13,18 @@ def log(message):
 
 def main():
     log("---delete.py called ---")
+    request_method = os.environ.get('REQUEST_METHOD')
+    log(f"REQUEST_METHOD: {request_method}")
+
+    if request_method != 'DELETE':
+        print("Status: 405 Method Not Allowed")
+        print("Allow: DELETE")
+        print("Content-Type: text/plain")
+        print()
+        print("This script only supports the DELETE method.")
+        log(f"Invalid request method: {request_method}")
+        return
+
     try:
         content_length = int(os.environ.get('CONTENT_LENGTH', 0))
         body = sys.stdin.read(content_length)
