@@ -141,6 +141,12 @@ fn handle_get(
     let path = Path::new(&route.root).join(relative_path);
 
     if path.is_dir() {
+        if !request.path.ends_with('/') {
+            let new_path = format!("{}/", request.path);
+            let mut response = Response::new(301, b"Moved Permanently".to_vec(), config.connection_type.clone());
+            response.headers.insert("Location".to_string(), new_path);
+            return response;
+        }
         let index_path = path.join(&route.index);
         if index_path.is_file() {
             return serve_file(&index_path, config, Some(request));
