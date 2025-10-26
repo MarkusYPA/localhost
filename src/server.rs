@@ -1,7 +1,7 @@
 use crate::config::{ServerConfig, SingleServerConfig};
 use crate::io::kqueue;
 use crate::session::SessionManager;
-use libc::{self, EVFILT_READ, EV_ADD, EV_ENABLE, EV_EOF};
+use libc::{self, EVFILT_READ, EVFILT_WRITE, EV_ADD, EV_ENABLE, EV_EOF};
 use log::{debug, error, info, warn};
 use std::collections::{HashMap, HashSet};
 use std::io::{Read, Write};
@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 const CONNECTION_TIMEOUT_SECS: u64 = 2;
-const MAX_CONNECTIONS: usize = 100;
+const MAX_CONNECTIONS: usize = 1000;
 
 pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
     // --- Setup listeners ---
@@ -69,6 +69,7 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
     let mut connection_buffers: HashMap<i32, Vec<u8>> = HashMap::new();
     let mut client_addresses: HashMap<i32, SocketAddr> = HashMap::new();
     let mut server_addresses: HashMap<i32, SocketAddr> = HashMap::new();
+    let mut write_buffers: HashMap<i32, (usize, Vec<u8>)> = HashMap::new();
 
     // --- Register listener fds for read events ---
     let changes: Vec<libc::kevent> = listeners
@@ -110,6 +111,7 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                     connection_buffers.remove(&fd);
                     client_addresses.remove(&fd);
                     server_addresses.remove(&fd);
+                    write_buffers.remove(&fd);
                 }
                 false // Remove from map
             } else {
@@ -163,6 +165,39 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                     // Leak the stream so it stays open; we’ll recreate from fd on read
                     std::mem::forget(stream);
                 }
+            } else if ev.filter == EVFILT_WRITE {
+                // --- Socket ready for writing ---
+                if let Some((offset, buffer)) = write_buffers.get_mut(&fd) {
+                    let mut stream = unsafe { std::net::TcpStream::from_raw_fd(fd) };
+                    match stream.write(&buffer[*offset..]) {
+                        Ok(n) => {
+                            *offset += n;
+                            if *offset == buffer.len() {
+                                // All data written, remove from buffer
+                                write_buffers.remove(&fd);
+                            } else {
+                                // Still more to write, re-register for next write event
+                                if let Err(e) = register_write_event(kq, fd) {
+                                    error!("Failed to re-register write event for fd {fd}: {e}");
+                                    write_buffers.remove(&fd); // Stop trying
+                                }
+                            }
+                        }
+                        Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                            // This can happen if the buffer filled up again between the event
+                            // and the write call. Re-register to try again later.
+                            if let Err(e) = register_write_event(kq, fd) {
+                                error!("Failed to re-register write event for fd {fd}: {e}");
+                                write_buffers.remove(&fd); // Stop trying
+                            }
+                        }
+                        Err(e) => {
+                            error!("Error during buffered write on fd {fd}: {e}");
+                            write_buffers.remove(&fd); // Stop trying
+                        }
+                    }
+                    std::mem::forget(stream);
+                }
             } else if ev.filter == EVFILT_READ {
                 // --- Data available from client ---
                 if let Some(server_configs) = client_server_configs.get(&fd) {
@@ -177,6 +212,7 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                             connection_buffers.remove(&fd);
                             client_addresses.remove(&fd);
                             server_addresses.remove(&fd);
+                            write_buffers.remove(&fd);
                         }
                         Ok(n) => {
                             buffer.extend_from_slice(&chunk[..n]);
@@ -221,7 +257,15 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                                             server_config,
                                             Some(&request),
                                         );
-                                        let _ = stream_owner.write_all(&response.to_bytes());
+                                        if let Err(e) = schedule_response(
+                                            fd,
+                                            kq,
+                                            &mut write_buffers,
+                                            response.to_bytes(),
+                                            &mut connections_activity,
+                                        ) {
+                                            error!("Failed to schedule 413 response for fd {fd}: {e}");
+                                        }
                                     } else {
                                         let response = {
                                             let mut session_manager_lock =
@@ -289,7 +333,15 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                                                 ),
                                             }
                                         };
-                                        let _ = stream_owner.write_all(&response.to_bytes());
+                                        if let Err(e) = schedule_response(
+                                            fd,
+                                            kq,
+                                            &mut write_buffers,
+                                            response.to_bytes(),
+                                            &mut connections_activity,
+                                        ) {
+                                            error!("Failed to schedule response for fd {fd}: {e}");
+                                        }
                                     }
 
                                     buffer.drain(..consumed);
@@ -304,11 +356,20 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                                         &server_configs[0],
                                         None,
                                     );
-                                    let _ = stream_owner.write_all(&response.to_bytes());
+                                    if let Err(e) = schedule_response(
+                                        fd,
+                                        kq,
+                                        &mut write_buffers,
+                                        response.to_bytes(),
+                                        &mut connections_activity,
+                                    ) {
+                                        error!("Failed to schedule 400 response for fd {fd}: {e}");
+                                    }
                                     client_server_configs.remove(&fd);
                                     connection_buffers.remove(&fd);
                                     client_addresses.remove(&fd);
                                     server_addresses.remove(&fd);
+                                    write_buffers.remove(&fd);
                                 }
                             }
                         }
@@ -321,6 +382,7 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                             connection_buffers.remove(&fd);
                             client_addresses.remove(&fd);
                             server_addresses.remove(&fd);
+                            write_buffers.remove(&fd);
                         }
                     }
                 }
@@ -332,8 +394,58 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                     connection_buffers.remove(&fd);
                     client_addresses.remove(&fd);
                     server_addresses.remove(&fd);
+                    write_buffers.remove(&fd);
                 }
             }
         }
     }
+}
+
+fn register_write_event(kq: i32, fd: i32) -> std::io::Result<()> {
+    let change = libc::kevent {
+        ident: fd as libc::uintptr_t,
+        filter: libc::EVFILT_WRITE,
+        flags: libc::EV_ADD | libc::EV_ONESHOT,
+        fflags: 0,
+        data: 0,
+        udata: std::ptr::null_mut(),
+    };
+    kqueue::kevent(kq, std::slice::from_ref(&change), &mut [], None).map(|_| ())
+}
+
+fn schedule_response(
+    fd: i32,
+    kq: i32,
+    write_buffers: &mut HashMap<i32, (usize, Vec<u8>)>, // (offset, data)
+    response_bytes: Vec<u8>,
+    connections_activity: &mut HashMap<i32, Instant>,
+) -> std::io::Result<()> {
+    if write_buffers.contains_key(&fd) {
+        warn!("Dropping new response for fd {fd} as a write is already pending.");
+        return Ok(());
+    }
+
+    let mut stream = unsafe { std::net::TcpStream::from_raw_fd(fd) };
+    let result = match stream.write(&response_bytes) {
+        Ok(n) => {
+            connections_activity.insert(fd, Instant::now());
+            if n < response_bytes.len() {
+                write_buffers.insert(fd, (n, response_bytes));
+                register_write_event(kq, fd)?;
+            }
+            Ok(())
+        }
+        Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+            connections_activity.insert(fd, Instant::now());
+            write_buffers.insert(fd, (0, response_bytes));
+            register_write_event(kq, fd)?;
+            Ok(())
+        }
+        Err(e) => {
+            error!("Initial write error on fd {fd}: {e}");
+            Err(e)
+        }
+    };
+    std::mem::forget(stream);
+    result
 }
