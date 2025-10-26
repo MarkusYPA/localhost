@@ -92,7 +92,12 @@ Yes. If a read or write error occurs, or if the client disconnects (`EV_EOF`), t
 
 **Is writing and reading ALWAYS done through a select (or equivalent)?**
 
-Reading is always triggered by `kqueue`, ensuring the server only reads when there is data available. Writing is done directly in the same thread after the request is processed. The assumption is that the response is small enough to be written without blocking for a long time. For a high-performance server handling large downloads, writes would also be registered with `kqueue` to only happen when the socket is ready.
+Yes. The server uses a `kqueue`-based event loop for all asynchronous I/O.
+
+- **Reading**: Client sockets are registered for read events (`EVFILT_READ`), so the server only attempts to `read()` when `kqueue` signals that data is available.
+- **Writing**: When a response needs to be sent, the server first attempts a direct, non-blocking `write()`. If this write cannot complete immediately (either because it only wrote some of the data, or the socket's buffer was full and the write would block), the remaining data is buffered. A one-shot write event (`EVFILT_WRITE`) is then registered with `kqueue`. The server is only notified to resume writing when the socket is ready, preventing the event loop from being blocked by slow clients.
+
+This ensures that both reading from and writing to clients are handled in a fully non-blocking manner.
 
 ## Configuration file
 
