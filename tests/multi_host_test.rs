@@ -8,7 +8,9 @@ use std::time::Duration;
 lazy_static! {
     static ref SERVER_THREAD: thread::JoinHandle<()> = {
         thread::spawn(|| {
-            if let Err(e) = http_server::run(Some("server_multi_host.json")) {
+            let config_content = std::fs::read_to_string("server_multi_host.json").unwrap();
+            let server_configs = vec![http_server::config::parse_config(&config_content).unwrap()];
+            if let Err(e) = http_server::run(server_configs) {
                 eprintln!("Server error: {}", e);
                 std::process::exit(1);
             }

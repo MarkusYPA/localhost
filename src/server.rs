@@ -1,15 +1,14 @@
-use std::collections::{HashMap, HashSet};
-use std::io::{Read, Write};
-use std::net::TcpListener;
-use std::os::fd::{AsRawFd, FromRawFd};
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
-
-use libc::{self, EVFILT_READ, EV_ADD, EV_ENABLE, EV_EOF};
-
 use crate::config::{ServerConfig, SingleServerConfig};
 use crate::io::kqueue;
 use crate::session::SessionManager;
+use libc::{self, EVFILT_READ, EV_ADD, EV_ENABLE, EV_EOF};
+use log::{debug, error, info, warn};
+use std::collections::{HashMap, HashSet};
+use std::io::{Read, Write};
+use std::net::{SocketAddr, TcpListener};
+use std::os::fd::{AsRawFd, FromRawFd};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 const CONNECTION_TIMEOUT_SECS: u64 = 2;
@@ -33,7 +32,10 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
         let mut names = HashSet::new();
         for config in configs {
             if !names.insert(&config.server_name) {
-                eprintln!("Warning: Duplicate server_name '{}' found for the same port. The first defined server will be used.", config.server_name);
+                warn!(
+                    "Duplicate server_name '{}' found for the same port. The first defined server will be used.",
+                    config.server_name
+                );
             }
         }
     }
@@ -48,7 +50,7 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
         let addr = format!("{}:{port}", configs[0].host);
         let listener = TcpListener::bind(&addr)?;
         listener.set_nonblocking(true)?;
-        println!("Server listening on {addr}");
+        info!("Server listening on {addr}");
         let lfd = listener.as_raw_fd();
         server_configs_by_fd.insert(lfd, configs);
         listeners.push(listener);
@@ -56,7 +58,7 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
 
     // --- Create kqueue ---
     let kq = kqueue::kqueue()?;
-    println!("Server initialized, waiting for events...");
+    info!("Server initialized, waiting for events...");
 
     // --- Session Manager ---
     let session_manager = Arc::new(Mutex::new(SessionManager::new(3600))); // 1 hour timeout
@@ -65,6 +67,8 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
     let mut connections_activity: HashMap<i32, Instant> = HashMap::new();
     let mut client_server_configs: HashMap<i32, Vec<SingleServerConfig>> = HashMap::new();
     let mut connection_buffers: HashMap<i32, Vec<u8>> = HashMap::new();
+    let mut client_addresses: HashMap<i32, SocketAddr> = HashMap::new();
+    let mut server_addresses: HashMap<i32, SocketAddr> = HashMap::new();
 
     // --- Register listener fds for read events ---
     let changes: Vec<libc::kevent> = listeners
@@ -86,21 +90,23 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
         match session_manager.lock() {
             Ok(mut guard) => guard.clean_expired_sessions(),
             Err(poisoned) => {
-                eprintln!("Session manager lock was poisoned: {}. Recovering...", poisoned);
+                error!("Session manager lock was poisoned: {}. Recovering...", poisoned);
                 let mut guard = poisoned.into_inner();
                 guard.clean_expired_sessions();
             }
         }
-        
+
         // --- Check for connection timeouts ---
         let now = Instant::now();
         connections_activity.retain(|&fd, last_activity| {
             if now.duration_since(*last_activity).as_secs() > CONNECTION_TIMEOUT_SECS {
-                println!("Client fd {fd} timed out, closing");
+                info!("Client fd {fd} timed out, closing");
                 unsafe {
                     libc::close(fd);
                     client_server_configs.remove(&fd);
                     connection_buffers.remove(&fd);
+                    client_addresses.remove(&fd);
+                    server_addresses.remove(&fd);
                 }
                 false // Remove from map
             } else {
@@ -123,15 +129,16 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                 let listener = listeners.iter().find(|l| l.as_raw_fd() == fd).unwrap();
                 if let Ok((stream, addr)) = listener.accept() {
                     if connections_activity.len() >= MAX_CONNECTIONS {
-                        println!("Max connections reached, rejecting new connection from {addr}");
+                        warn!("Max connections reached, rejecting new connection from {addr}");
                         drop(stream); // Close the connection
                         continue;
                     }
 
-                    println!("Accepted connection from {addr}");
+                    info!("Accepted connection from {addr}");
+                    let local_addr = stream.local_addr()?;
                     stream.set_nonblocking(true)?;
                     let cfd = stream.as_raw_fd();
-                    println!("Registered client {cfd}");
+                    debug!("Registered client {cfd}");
                     // Register client fd for read events
                     let change = libc::kevent {
                         ident: cfd as libc::uintptr_t,
@@ -147,6 +154,8 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                     connections_activity.insert(cfd, Instant::now());
                     client_server_configs.insert(cfd, server_configs.clone());
                     connection_buffers.insert(cfd, Vec::new());
+                    client_addresses.insert(cfd, addr);
+                    server_addresses.insert(cfd, local_addr);
 
                     // Leak the stream so it stays open; we’ll recreate from fd on read
                     std::mem::forget(stream);
@@ -160,17 +169,26 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                     let mut chunk = [0u8; 4096];
                     match stream_owner.read(&mut chunk) {
                         Ok(0) => {
-                            println!("Client fd {fd} closed connection");
+                            info!("Client fd {fd} closed connection");
                             client_server_configs.remove(&fd);
                             connection_buffers.remove(&fd);
+                            client_addresses.remove(&fd);
+                            server_addresses.remove(&fd);
                         }
                         Ok(n) => {
                             buffer.extend_from_slice(&chunk[..n]);
 
                             match crate::http::request::parse_request_from_buffer(buffer) {
                                 Ok(Some((request, consumed))) => {
+                                    let host = request.headers.get("host").map(|s| s.as_str()).unwrap_or("-");
+                                    if let (Some(remote_addr), Some(local_addr)) = (client_addresses.get(&fd), server_addresses.get(&fd)) {
+                                        info!(
+                                            "Request from {} to {} (Host: {}): {} {}",
+                                            remote_addr, local_addr, host, request.method, request.path
+                                        );
+                                    }
+
                                     connections_activity.insert(fd, Instant::now());
-                                    let host = request.headers.get("host").map(|s| s.as_str()).unwrap_or("");
                                     let host_without_port = host.split(':').next().unwrap_or("");
                                     let server_config = server_configs
                                         .iter()
@@ -205,7 +223,7 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                                             };
 
                                             if current_session.is_none() {
-                                                println!("No valid session found, creating a new one.");
+                                                debug!("No valid session found, creating a new one.");
                                                 let new_session = session_manager_lock.create_session();
                                                 session_id = Some(new_session.id);
                                                 current_session =
@@ -258,6 +276,8 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                                     let _ = stream_owner.write_all(&response.to_bytes());
                                     client_server_configs.remove(&fd);
                                     connection_buffers.remove(&fd);
+                                    client_addresses.remove(&fd);
+                                    server_addresses.remove(&fd);
                                 }
                             }
                         }
@@ -265,17 +285,22 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                             std::mem::forget(stream_owner);
                         }
                         Err(e) => {
-                            eprintln!("Read error on fd {fd}: {e}");
+                            error!("Read error on fd {fd}: {e}");
                             client_server_configs.remove(&fd);
                             connection_buffers.remove(&fd);
+                            client_addresses.remove(&fd);
+                            server_addresses.remove(&fd);
                         }
                     }
                 }
             } else if ev.flags & EV_EOF != 0 {
+                info!("Client fd {} disconnected (EOF)", fd);
                 unsafe {
                     libc::close(fd);
                     client_server_configs.remove(&fd);
                     connection_buffers.remove(&fd);
+                    client_addresses.remove(&fd);
+                    server_addresses.remove(&fd);
                 }
             }
         }

@@ -3,12 +3,13 @@ use crate::config::{Route, SingleServerConfig};
 use crate::http::request::Request;
 use crate::http::response::Response;
 use crate::session::Session;
+use log::{debug, error};
 use std::fs;
 use std::path::Path;
 
 fn handle_error(status_code: u16, config: &SingleServerConfig, request: Option<&Request>) -> Response {
     if let Some(req) = request {
-        eprintln!("[ERROR] {} {}: {}", req.method, req.path, crate::http::status::reason_phrase(status_code));
+        error!("{} {}: {}", req.method, req.path, crate::http::status::reason_phrase(status_code));
     }
     if let Some(error_page_path_str) = config.error_pages.get(&status_code) {
         let current_dir = match std::env::current_dir() {
@@ -161,7 +162,7 @@ fn handle_get(
         return serve_file(&path, config, Some(request));
     }
 
-    println!("handle_get: 404 Not Found");
+    debug!("handle_get: 404 Not Found");
     handle_error(404, config, Some(request))
 }
 

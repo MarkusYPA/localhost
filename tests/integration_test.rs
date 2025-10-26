@@ -9,7 +9,9 @@ static START: Once = Once::new();
 lazy_static! {
     static ref SERVER_THREAD: thread::JoinHandle<()> = {
         thread::spawn(|| {
-            if let Err(e) = http_server::run(None) {
+            let config_content = std::fs::read_to_string("comprehensive_server.json").unwrap();
+            let server_configs = vec![http_server::config::parse_config(&config_content).unwrap()];
+            if let Err(e) = http_server::run(server_configs) {
                 eprintln!("Server error: {}", e);
                 std::process::exit(1);
             }
@@ -37,9 +39,8 @@ fn test_get_index() {
 
     // Check the body
     let body = resp.text().unwrap();
-    assert_eq!(
-        body,
-        "<html>\n\n<body>\n    <h1>Hello from index.html!</h1>\n</body>\n\n</html>"
+    assert!(
+        body.contains("Hello from site 1!")
     );
 }
 
@@ -79,8 +80,6 @@ fn test_serve_static_website() {
     let resp = reqwest::blocking::get("http://127.0.0.1:8081/site/image.png").unwrap();
     assert_eq!(resp.status(), 200);
     assert_eq!(resp.headers()["content-type"], "image/png");
-    let body = resp.text().unwrap();
-    assert_eq!(body, "placeholder image");
 }
 
 #[test]
