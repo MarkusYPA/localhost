@@ -20,6 +20,13 @@
             ".py": "python3",
             ".sh": "bash"
           }
+        },
+        {
+          "path": "/site",
+          "methods": ["GET"],
+          "root": "./www/site",
+          "index": "index.html",
+          "autoindex": true
         }
       ]
     },

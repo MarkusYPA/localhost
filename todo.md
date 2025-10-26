@@ -4,7 +4,7 @@
 - [x] Implement a single-threaded, non-blocking event loop using `kqueue`.
 - [x] Handle multiple listeners on different ports.
 - [x] Implement robust error handling to prevent crashes.
-- [ ] Implement connection timeout for idle clients.
+- [x] Implement connection timeout for idle clients.
 - [x] Implement a limit for maximum concurrent connections.
 - [ ] Handle graceful shutdown.
 
@@ -23,7 +23,7 @@
 ## CGI
 - [x] Implement CGI execution by forking a new process.
 - [x] Pass environment variables to the CGI script (e.g., `PATH_INFO`, `REQUEST_METHOD`).
-- [ ] Handle CGI script timeout.
+- [x] Handle CGI script timeout.
 - [x] Support at least one CGI language (e.g., Python).
 - [ ] Bonus: Support more CGI languages.
 

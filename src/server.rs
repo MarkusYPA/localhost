@@ -45,10 +45,10 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
         if configs.is_empty() {
             continue;
         }
-        let addr = format!("{}:{}", configs[0].host, port);
+        let addr = format!("{}:{port}", configs[0].host);
         let listener = TcpListener::bind(&addr)?;
         listener.set_nonblocking(true)?;
-        println!("Server listening on {}", addr);
+        println!("Server listening on {addr}");
         let lfd = listener.as_raw_fd();
         server_configs_by_fd.insert(lfd, configs);
         listeners.push(listener);
@@ -96,7 +96,7 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
         let now = Instant::now();
         connections_activity.retain(|&fd, last_activity| {
             if now.duration_since(*last_activity).as_secs() > CONNECTION_TIMEOUT_SECS {
-                println!("Client fd {} timed out, closing", fd);
+                println!("Client fd {fd} timed out, closing");
                 unsafe {
                     libc::close(fd);
                     client_server_configs.remove(&fd);
@@ -123,15 +123,15 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                 let listener = listeners.iter().find(|l| l.as_raw_fd() == fd).unwrap();
                 if let Ok((stream, addr)) = listener.accept() {
                     if connections_activity.len() >= MAX_CONNECTIONS {
-                        println!("Max connections reached, rejecting new connection from {}", addr);
+                        println!("Max connections reached, rejecting new connection from {addr}");
                         drop(stream); // Close the connection
                         continue;
                     }
 
-                    println!("Accepted connection from {}", addr);
+                    println!("Accepted connection from {addr}");
                     stream.set_nonblocking(true)?;
                     let cfd = stream.as_raw_fd();
-                    println!("Registered client {}", cfd);
+                    println!("Registered client {cfd}");
                     // Register client fd for read events
                     let change = libc::kevent {
                         ident: cfd as libc::uintptr_t,
@@ -160,7 +160,7 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                     let mut chunk = [0u8; 4096];
                     match stream_owner.read(&mut chunk) {
                         Ok(0) => {
-                            println!("Client fd {} closed connection", fd);
+                            println!("Client fd {fd} closed connection");
                             client_server_configs.remove(&fd);
                             connection_buffers.remove(&fd);
                         }
@@ -181,7 +181,8 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                                         let response = crate::http::response::Response::new(
                                             413,
                                             b"Payload Too Large".to_vec(),
-                                            server_config.connection_type.clone(),
+                                            server_config,
+                                            Some(&request),
                                         );
                                         let _ = stream_owner.write_all(&response.to_bytes());
                                     } else {
@@ -224,8 +225,7 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                                                             resp.headers.insert(
                                                                 "Set-Cookie".to_string(),
                                                                 format!(
-                                                                    "session_id={}; HttpOnly; Path=/",
-                                                                    sid
+                                                                    "session_id={sid}; HttpOnly; Path=/"
                                                                 ),
                                                             );
                                                         }
@@ -235,7 +235,8 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                                                 None => crate::http::response::Response::new(
                                                     404,
                                                     b"Not Found".to_vec(),
-                                                    server_config.connection_type.clone(),
+                                                    server_config,
+                                                    Some(&request),
                                                 ),
                                             }
                                         };
@@ -251,7 +252,8 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                                     let response = crate::http::response::Response::new(
                                         400,
                                         b"Bad Request".to_vec(),
-                                        server_configs[0].connection_type.clone(),
+                                        &server_configs[0],
+                                        None,
                                     );
                                     let _ = stream_owner.write_all(&response.to_bytes());
                                     client_server_configs.remove(&fd);
@@ -263,7 +265,7 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                             std::mem::forget(stream_owner);
                         }
                         Err(e) => {
-                            eprintln!("Read error on fd {}: {}", fd, e);
+                            eprintln!("Read error on fd {fd}: {e}");
                             client_server_configs.remove(&fd);
                             connection_buffers.remove(&fd);
                         }

@@ -14,9 +14,8 @@ use crate::session::Session;
 /// Converts a Rust string slice to a CString, handling potential null bytes.
 /// Returns a `Result` which is an `Err` containing a 500 Internal Server Error
 /// response if the conversion fails.
-fn to_cstring<S: AsRef<[u8]>>(s: S) -> Result<CString, Response> {
-    CString::new(s.as_ref())
-        .map_err(|_| Response::new(500, b"Internal Server Error: Invalid CString".to_vec(), "close".to_string()))
+fn to_cstring<S: AsRef<[u8]>>(s: S) -> Result<CString, ()> {
+    CString::new(s.as_ref()).map_err(|_| ())
 }
 
 pub fn handle_cgi(
@@ -56,7 +55,8 @@ fn handle_cgi_internal(
         return Err(Response::new(
             500,
             b"CGI Error: Failed to create stdin pipe".to_vec(),
-            config.connection_type.clone(),
+            config,
+            Some(request),
         ));
     }
     // Create stdout pipe for the CGI process
@@ -69,7 +69,8 @@ fn handle_cgi_internal(
         return Err(Response::new(
             500,
             b"CGI Error: Failed to create stdout pipe".to_vec(),
-            config.connection_type.clone(),
+            config,
+            Some(request),
         ));
     }
 
@@ -87,7 +88,8 @@ fn handle_cgi_internal(
         Err(Response::new(
             500,
             b"CGI Error: Failed to fork process".to_vec(),
-            config.connection_type.clone(),
+            config,
+            Some(request),
         ))
     } else if pid == 0 {
         // Child process: This is where the CGI script will be executed.
@@ -105,8 +107,8 @@ fn handle_cgi_internal(
 
             // Prepare CGI script path and executor as CStrings
             let cgi_path_str = cgi_path.to_str().unwrap_or_default();
-            let cgi_path_c = to_cstring(cgi_path_str)?;
-            let cgi_executor_c = to_cstring(cgi_executor)?;
+            let cgi_path_c = to_cstring(cgi_path_str).map_err(|_| libc::_exit(1))?;
+            let cgi_executor_c = to_cstring(cgi_executor).map_err(|_| libc::_exit(1))?;
 
             // Arguments for execve: first is the executor, second is the script path, then null
             let args = [
@@ -116,8 +118,8 @@ fn handle_cgi_internal(
             ];
 
             // Prepare environment variables for the CGI script
-            let path_info = to_cstring(request.path.as_bytes())?;
-            let request_method = to_cstring(request.method.as_bytes())?;
+            let path_info = to_cstring(request.path.as_bytes()).map_err(|_| libc::_exit(1))?;
+            let request_method = to_cstring(request.method.as_bytes()).map_err(|_| libc::_exit(1))?;
             let query_string = to_cstring(
                 request
                     .query_params
@@ -126,37 +128,37 @@ fn handle_cgi_internal(
                     .collect::<Vec<String>>()
                     .join("&")
                     .as_bytes(),
-            )?;
+            ).map_err(|_| libc::_exit(1))?;
             let content_type = to_cstring(
                 request
                     .headers
                     .get("content-type")
                     .map(|s| s.as_bytes())
                     .unwrap_or_default(),
-            )?;
-            let content_length = to_cstring(request.body.len().to_string().as_bytes())?;
+            ).map_err(|_| libc::_exit(1))?;
+            let content_length = to_cstring(request.body.len().to_string().as_bytes()).map_err(|_| libc::_exit(1))?;
 
             let mut env_vars = Vec::new();
             env_vars.push(to_cstring(format!(
                 "PATH_INFO={}",
                 path_info.to_str().unwrap_or_default()
-            ))?);
+            )).map_err(|_| libc::_exit(1))?);
             env_vars.push(to_cstring(format!(
                 "REQUEST_METHOD={}",
                 request_method.to_str().unwrap_or_default()
-            ))?);
+            )).map_err(|_| libc::_exit(1))?);
             env_vars.push(to_cstring(format!(
                 "QUERY_STRING={}",
                 query_string.to_str().unwrap_or_default()
-            ))?);
+            )).map_err(|_| libc::_exit(1))?);
             env_vars.push(to_cstring(format!(
                 "CONTENT_TYPE={}",
                 content_type.to_str().unwrap_or_default()
-            ))?);
+            )).map_err(|_| libc::_exit(1))?);
             env_vars.push(to_cstring(format!(
                 "CONTENT_LENGTH={}",
                 content_length.to_str().unwrap_or_default()
-            ))?);
+            )).map_err(|_| libc::_exit(1))?);
 
             // Convert environment variables to a suitable format for execve
             let mut env_ptrs: Vec<*const libc::c_char> =
@@ -200,11 +202,12 @@ fn handle_cgi_internal(
                 Ok(false) => {
                     // Child process timed out
                     libc::kill(pid, libc::SIGKILL);
-                    libc::waitpid(pid, &mut 0, 0); // Clean up the zombie process
+                    libc::waitpid(pid, &mut 0, 0);
                     return Err(Response::new(
                         504,
                         b"CGI Error: Script timed out".to_vec(),
-                        config.connection_type.clone(),
+                        config,
+                        Some(request),
                     ));
                 }
                 Err(e) => {
@@ -212,7 +215,8 @@ fn handle_cgi_internal(
                     return Err(Response::new(
                         500,
                         format!("CGI Error: Failed to wait for child process: {e}").into_bytes(),
-                        config.connection_type.clone(),
+                        config,
+                        Some(request),
                     ));
                 }
             }
@@ -263,7 +267,7 @@ fn handle_cgi_internal(
                 }
             }
 
-            let mut response = Response::new(status_code, body, config.connection_type.clone());
+            let mut response = Response::new(status_code, body, config, Some(request));
             for (key, value) in headers {
                 response.headers.insert(key, value);
             }

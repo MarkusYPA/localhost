@@ -13,7 +13,7 @@ fn handle_error(status_code: u16, config: &SingleServerConfig, request: Option<&
     if let Some(error_page_path_str) = config.error_pages.get(&status_code) {
         let current_dir = match std::env::current_dir() {
             Ok(dir) => dir,
-            Err(_) => return Response::new(500, b"Internal Server Error".to_vec(), config.connection_type.clone()),
+            Err(_) => return Response::new(500, b"Internal Server Error".to_vec(), config, None),
         };
         let error_page_path = current_dir.join(
             error_page_path_str
@@ -22,7 +22,7 @@ fn handle_error(status_code: u16, config: &SingleServerConfig, request: Option<&
         );
         match fs::read(&error_page_path) {
             Ok(body) => {
-                let mut response = Response::new(status_code, body, config.connection_type.clone());
+                let mut response = Response::new(status_code, body, config, request);
                 response
                     .headers
                     .insert("Content-Type".to_string(), "text/html".to_string());
@@ -30,12 +30,12 @@ fn handle_error(status_code: u16, config: &SingleServerConfig, request: Option<&
             }
             Err(_) => {
                 let reason_phrase = crate::http::status::reason_phrase(status_code);
-                Response::new(status_code, reason_phrase.as_bytes().to_vec(), config.connection_type.clone())
+                Response::new(status_code, reason_phrase.as_bytes().to_vec(), config, request)
             }
         }
     } else {
         let reason_phrase = crate::http::status::reason_phrase(status_code);
-        Response::new(status_code, reason_phrase.as_bytes().to_vec(), config.connection_type.clone())
+        Response::new(status_code, reason_phrase.as_bytes().to_vec(), config, request)
     }
 }
 
@@ -69,7 +69,7 @@ fn try_handle_cgi(
     if path.is_file() {
         if let Some(ext) = path.extension() {
             let ext_str = match ext.to_str() {
-                Some(s) => format!(".{}", s),
+                Some(s) => format!(".{s}"),
                 None => return None,
             };
 
@@ -143,7 +143,7 @@ fn handle_get(
     if path.is_dir() {
         if !request.path.ends_with('/') {
             let new_path = format!("{}/", request.path);
-            let mut response = Response::new(301, b"Moved Permanently".to_vec(), config.connection_type.clone());
+            let mut response = Response::new(301, b"Moved Permanently".to_vec(), config, Some(request));
             response.headers.insert("Location".to_string(), new_path);
             return response;
         }
@@ -167,15 +167,15 @@ fn handle_get(
 
 fn list_directory(path: &Path, request_path: &str, config: &SingleServerConfig, request: Option<&Request>) -> Response {
     let mut body = String::new();
-    body.push_str(&format!("<html><body><h1>Index of {}</h1><ul>", request_path));
+    body.push_str(&format!("<html><body><h1>Index of {request_path}</h1><ul>"));
 
     match fs::read_dir(path) {
         Ok(entries) => {
             for entry in entries {
                 if let Ok(entry) = entry {
                     let file_name = entry.file_name().to_string_lossy().to_string();
-                    let link = format!("{}/{}", request_path.trim_end_matches('/'), file_name);
-                    body.push_str(&format!("<li><a href=\"{}\">{}</a></li>", link, file_name));
+                    let link = format!("{}/{file_name}", request_path.trim_end_matches('/'));
+                    body.push_str(&format!("<li><a href=\"{link}\">{file_name}</a></li>"));
                 }
             }
         }
@@ -183,7 +183,7 @@ fn list_directory(path: &Path, request_path: &str, config: &SingleServerConfig, 
     }
 
     body.push_str("</ul></body></html>");
-    let mut response = Response::new(200, body.as_bytes().to_vec(), config.connection_type.clone());
+    let mut response = Response::new(200, body.as_bytes().to_vec(), config, request);
     response.headers.insert("Content-Type".to_string(), "text/html".to_string());
     response
 }
@@ -191,7 +191,7 @@ fn list_directory(path: &Path, request_path: &str, config: &SingleServerConfig, 
 fn serve_file(path: &Path, config: &SingleServerConfig, request: Option<&Request>) -> Response {
     match fs::read(path) {
         Ok(body) => {
-            let mut response = Response::new(200, body, config.connection_type.clone());
+            let mut response = Response::new(200, body, config, request);
             let content_type = mime_guess::from_path(path).first_or_octet_stream();
             response
                 .headers
