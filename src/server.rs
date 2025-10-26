@@ -90,7 +90,10 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
         match session_manager.lock() {
             Ok(mut guard) => guard.clean_expired_sessions(),
             Err(poisoned) => {
-                error!("Session manager lock was poisoned: {}. Recovering...", poisoned);
+                error!(
+                    "Session manager lock was poisoned: {}. Recovering...",
+                    poisoned
+                );
                 let mut guard = poisoned.into_inner();
                 guard.clean_expired_sessions();
             }
@@ -180,11 +183,21 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
 
                             match crate::http::request::parse_request_from_buffer(buffer) {
                                 Ok(Some((request, consumed))) => {
-                                    let host = request.headers.get("host").map(|s| s.as_str()).unwrap_or("-");
-                                    if let (Some(remote_addr), Some(local_addr)) = (client_addresses.get(&fd), server_addresses.get(&fd)) {
+                                    let host = request
+                                        .headers
+                                        .get("host")
+                                        .map(|s| s.as_str())
+                                        .unwrap_or("-");
+                                    if let (Some(remote_addr), Some(local_addr)) =
+                                        (client_addresses.get(&fd), server_addresses.get(&fd))
+                                    {
                                         info!(
                                             "Request from {} to {} (Host: {}): {} {}",
-                                            remote_addr, local_addr, host, request.method, request.path
+                                            remote_addr,
+                                            local_addr,
+                                            host,
+                                            request.method,
+                                            request.path
                                         );
                                     }
 
@@ -196,6 +209,12 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                                         .unwrap_or_else(|| &server_configs[0]);
 
                                     if request.body.len() > server_config.client_max_body_size {
+                                        let payload_size = request.body.len();
+                                        let max_size = server_config.client_max_body_size;
+                                        if let Some(addr) = client_addresses.get(&fd) {
+                                            error!("Client {} sent payload of {} bytes to {}, exceeding max body size of {} bytes",
+                                            addr, payload_size, request.path, max_size);
+                                        }
                                         let response = crate::http::response::Response::new(
                                             413,
                                             b"Payload Too Large".to_vec(),
@@ -205,12 +224,15 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                                         let _ = stream_owner.write_all(&response.to_bytes());
                                     } else {
                                         let response = {
-                                            let mut session_manager_lock = match session_manager.lock() {
-                                                Ok(guard) => guard,
-                                                Err(poisoned) => poisoned.into_inner(),
-                                            };
+                                            let mut session_manager_lock =
+                                                match session_manager.lock() {
+                                                    Ok(guard) => guard,
+                                                    Err(poisoned) => poisoned.into_inner(),
+                                                };
                                             let mut session_id: Option<Uuid> = None;
-                                            if let Some(cookie_header) = request.cookies.get("session_id") {
+                                            if let Some(cookie_header) =
+                                                request.cookies.get("session_id")
+                                            {
                                                 if let Ok(uuid) = Uuid::parse_str(cookie_header) {
                                                     session_id = Some(uuid);
                                                 }
@@ -223,14 +245,20 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                                             };
 
                                             if current_session.is_none() {
-                                                debug!("No valid session found, creating a new one.");
-                                                let new_session = session_manager_lock.create_session();
+                                                debug!(
+                                                    "No valid session found, creating a new one."
+                                                );
+                                                let new_session =
+                                                    session_manager_lock.create_session();
                                                 session_id = Some(new_session.id);
-                                                current_session =
-                                                    session_manager_lock.get_session(&new_session.id);
+                                                current_session = session_manager_lock
+                                                    .get_session(&new_session.id);
                                             }
 
-                                            match crate::handler::find_route(&request, server_config) {
+                                            match crate::handler::find_route(
+                                                &request,
+                                                server_config,
+                                            ) {
                                                 Some(route) => {
                                                     let mut resp = crate::handler::handle_request(
                                                         &request,
@@ -239,7 +267,10 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                                                         &mut current_session,
                                                     );
                                                     if let Some(sid) = session_id {
-                                                        if !request.cookies.contains_key("session_id") {
+                                                        if !request
+                                                            .cookies
+                                                            .contains_key("session_id")
+                                                        {
                                                             resp.headers.insert(
                                                                 "Set-Cookie".to_string(),
                                                                 format!(

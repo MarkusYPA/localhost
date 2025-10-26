@@ -35,7 +35,7 @@ pub fn setup_logger(debug: bool) -> Result<(), fern::InitError> {
 
     let file_config = fern::Dispatch::new()
         .level(log::LevelFilter::Debug)
-        .chain(fern::log_file("server.log")?);
+        .chain(fern::log_file("./logs/server.log")?);
 
     let stdout_config = fern::Dispatch::new()
         .level(if debug {
