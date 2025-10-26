@@ -18,6 +18,12 @@ pub struct SingleServerConfig {
     pub client_max_body_size: usize,
     #[serde(default = "default_connection_type")]
     pub connection_type: String,
+    #[serde(default = "default_cgi_timeout")]
+    pub cgi_timeout: u64,
+}
+
+fn default_cgi_timeout() -> u64 {
+    5000 // 5 seconds
 }
 
 fn default_client_max_body_size() -> usize {

@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use crate::config::SingleServerConfig;
+use crate::http::request::Request;
 
 #[derive(Debug)]
 pub struct Response {
@@ -8,12 +10,22 @@ pub struct Response {
 }
 
 impl Response {
-    pub fn new(status_code: u16, body: Vec<u8>, connection_type: String) -> Self {
+    pub fn new(status_code: u16, body: Vec<u8>, config: &SingleServerConfig, request: Option<&Request>) -> Self {
         let mut headers = HashMap::new();
-        headers.insert("Content-Length".to_string(), body.len().to_string());
-        headers.insert("Connection".to_string(), connection_type);
+        let mut connection_type = config.connection_type.clone();
 
-        Response {
+        if let Some(req) = request {
+            if let Some(conn_header) = req.headers.get("connection") {
+                if conn_header.eq_ignore_ascii_case("close") {
+                    connection_type = "close".to_string();
+                }
+            }
+        }
+
+        headers.insert("Connection".to_string(), connection_type);
+        headers.insert("Content-Length".to_string(), body.len().to_string());
+
+        Self {
             status_code,
             headers,
             body,
@@ -21,22 +33,15 @@ impl Response {
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        let status_line = format!(
-            "HTTP/1.1 {} {}\r\n",
-            self.status_code,
-            crate::http::status::reason_phrase(self.status_code)
-        );
-        let mut headers = String::new();
+        let reason_phrase = crate::http::status::reason_phrase(self.status_code);
+        let mut response_str = format!("HTTP/1.1 {} {}\r\n", self.status_code, reason_phrase);
         for (key, value) in &self.headers {
-            headers.push_str(&format!("{key}: {value}\r\n"));
+            response_str.push_str(&format!("{}: {}\r\n", key, value));
         }
+        response_str.push_str("\r\n");
 
-        let mut response = Vec::new();
-        response.extend_from_slice(status_line.as_bytes());
-        response.extend_from_slice(headers.as_bytes());
-        response.extend_from_slice(b"\r\n");
-        response.extend_from_slice(&self.body);
-
-        response
+        let mut response_bytes = response_str.as_bytes().to_vec();
+        response_bytes.extend_from_slice(&self.body);
+        response_bytes
     }
 }

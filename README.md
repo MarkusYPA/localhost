@@ -33,7 +33,8 @@ This project implements a single-threaded, non-blocking HTTP/1.1 server in Rust,
 │   ├── lib.rs          # Library crate for core server logic
 │   ├── server.rs       # Main server event loop
 │   └── session.rs      # Cookie and session management
-├── server.conf         # Example configuration file
+├── config/             # Example configuration files
+│   └── server.json
 ├── tests/              # Integration tests
 │   └── integration_test.rs
 ├── www/                # Static web content
@@ -87,6 +88,7 @@ Here's an example of a JSON configuration file:
     -   `index`: Default file to serve if the URL is a directory (e.g., `index.html`).
     -   `autoindex`: `true` or `false` to enable/disable directory listing.
     -   `cgi_map`: A map associating file extensions with CGI executors (e.g., `{".py": "python3"}`).
+    -   `cgi_timeout`: The maximum time in milliseconds for a CGI script to run before it is terminated. Defaults to 5000.
 
 ## Usage
 
@@ -114,10 +116,10 @@ cargo run
 
 By default, the server will attempt to load configuration files from a directory named `config` in the project root. You can specify a different configuration source using the `--config` flag:
 
--   **To load configurations from a directory (e.g., `my_configs/`):**
+-   **To load configurations from a directory (e.g., `test_configs/`):**
 
     ```bash
-    cargo run -- --config my_configs/
+    cargo run -- --config test_configs/
     ```
 
     The server will attempt to load all `.json` files within the specified directory. Invalid configuration files will be logged as errors, but the server will continue to load valid ones.
@@ -183,6 +185,26 @@ Server listening on 127.0.0.1:8090
 Server listening on 127.0.0.1:8081
 Server initialized, waiting for events...
 ```
+
+### Testing chunked requests
+
+Send chuncked POST request to /cgi-bin/echo.py using this command:
+```bash
+printf "POST /cgi-bin/echo.py HTTP/1.1\r\nHost: localhost:8081\r\nTransfer-Encoding: chunked\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n5\r\nHello\r\n7\r\n World\!\r\n0\r\n\r\n" | nc localhost 8081
+```
+
+Expected result - unchunked body "Hello world!": 
+
+```
+HTTP/1.1 200 OK
+Connection: keep-alive
+Content-Length: 12
+Content-Type: text/plain
+Set-Cookie: session_id=6a8f5157-17b4-4456-9740-cffc0d002d27; HttpOnly; Path=/
+
+Hello World!
+```
+
 
 ### Memory Leak Testing (macOS)
 

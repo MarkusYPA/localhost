@@ -9,7 +9,7 @@ import datetime
 UPLOAD_DIR = './www/uploads'
 
 def log(message):
-    with open('upload.log', 'a') as f:
+    with open('./logs/upload.log', 'a') as f:
         f.write(f"{datetime.datetime.now()}: {message}\n")
 
 def main():

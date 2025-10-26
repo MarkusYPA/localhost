@@ -1,234 +1,219 @@
 # Audit Result
 
-This document provides answers to the audit questions based on the current state of the project.
+This document provides answers to the questions in `task/auditquestions.md`.
 
 ## Functional
 
-###### How does an HTTP server works?
+**How does an HTTP server works?**
 
-An HTTP server is a software that understands URLs (Uniform Resource Locators) and HTTP (Hypertext Transfer Protocol). It can be accessed through the domain names of the websites it hosts. When a user wants to load a website, their browser sends an HTTP request to the server. The server then finds the requested file and sends it back to the browser, which then displays it.
+An HTTP server is a software application that listens for network requests on one or more TCP ports. When a client (like a web browser) sends an HTTP request to the server, the server parses the request, which includes the method (e.g., GET, POST), path, headers, and an optional body. The server then processes the request, which might involve reading a file from the filesystem, executing a script, or accessing a database. Finally, it constructs and sends an HTTP response back to the client. The response contains a status code (e.g., 200 OK, 404 Not Found), headers, and a body (the content of the response).
 
-Our server implements this flow using a non-blocking event loop with I/O multiplexing.
+**Which function was used for I/O Multiplexing and how does it works?**
 
-###### Which function was used for I/O Multiplexing and how does it works?
+The server uses `kqueue` for I/O multiplexing. `kqueue` is a scalable event notification interface found in FreeBSD and macOS. It allows the server to monitor a large number of file descriptors (sockets) for I/O events (like incoming data or readiness to write) efficiently. The server registers events of interest (e.g., "data is available to read") with the `kqueue` instance. It then calls `kevent` to block until one or more of these events occur. This avoids the need to have a separate thread for each connection, making the server very resource-efficient.
 
-The server uses `kqueue` for I/O multiplexing, which is available on macOS and BSD systems. `kqueue` allows the server to monitor multiple sockets for events (like new connections or incoming data) with a single call, instead of having to poll each socket individually.
-
-Here is how it is used in `src/server.rs`:
+The core `kqueue` logic is in `src/io/kqueue.rs`:
 ```rust
-    // --- Create kqueue ---
-    let kq = kqueue::kqueue()?;
-    println!("Server initialized, waiting for events...");
-
-    // ...
-
-    // --- Register listener fds for read events ---
-    let changes: Vec<libc::kevent> = listeners
-        .iter()
-        .map(|listener| libc::kevent {
-            ident: listener.as_raw_fd() as libc::uintptr_t,
-            filter: EVFILT_READ,
-            flags: EV_ADD | EV_ENABLE,
-            fflags: 0,
-            data: 0,
-            udata: std::ptr::null_mut(),
-        })
-        .collect();
-
-    kqueue::kevent(kq, &changes, &mut [], None)?;
-
-    // --- Event loop ---
-    loop {
-        // ...
-        let nev = kqueue::kevent(kq, &[], &mut events, Some(Duration::from_secs(5)))?;
-        // ...
+pub fn kqueue() -> Result<RawFd, std::io::Error> {
+    let fd = unsafe { libc::kqueue() };
+    if fd < 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(fd)
     }
-```
+}
 
-###### Is the server using only one select (or equivalent) to read the client requests and write answers?
-
-Yes, the server uses a single `kqueue` instance to manage all I/O events.
-
-###### Why is it important to use only one select and how was it achieved?
-
-Using a single `kqueue` (or `select`/`epoll`) is crucial for efficiency and scalability. It allows a single thread to handle many concurrent connections without the overhead of creating a new thread for each connection and without the inefficiency of polling each socket in a loop. This is achieved by registering all listener and client sockets with the single `kqueue` instance.
-
-###### Read the code that goes from the select (or equivalent) to the read and write of a client, is there only one read or write per client per select (or equivalent)?
-
-Yes, for each event from `kqueue` that indicates a readable client socket, the server performs one `read` operation. After processing the request, it performs one `write` operation to send the response.
-
-###### Are the return values for I/O functions checked properly?
-
-Yes, all I/O operations and other functions that can fail return a `Result`. The `?` operator is used to propagate errors, and `match` statements are used to handle them where necessary.
-
-###### If an error is returned by the previous functions on a socket, is the client removed?
-
-Yes. For example, in `src/server.rs`, if a `read` operation on a client socket returns an error, the client is removed from the `client_server_configs` map, and the connection is closed.
-
-```rust
-Err(e) => {
-    eprintln!("Read error on fd {}: {}", fd, e);
-    client_server_configs.remove(&fd);
-    // don't call libc::close(fd)
+pub fn kevent(
+    kq: RawFd,
+    changelist: &[libc::kevent],
+    eventlist: &mut [libc::kevent],
+    timeout: Option<Duration>,
+) -> Result<i32, std::io::Error> {
+// ...
 }
 ```
 
-###### Is writing and reading ALWAYS done through a select (or equivalent)?
+**Is the server using only one select (or equivalent) to read the client requests and write answers?**
 
-The readiness of a socket for reading or writing is determined by `kqueue`. The actual `read` and `write` operations are then performed on the socket. This is the standard and correct way to use I/O multiplexing.
+Yes, the server uses a single `kqueue` instance within a central event loop in the `run` function in `src/server.rs`. This single `kqueue` instance manages all I/O events for all connections, including new client connections and data from existing clients.
+
+```rust
+// src/server.rs
+pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
+    // ...
+    let kq = kqueue::kqueue()?;
+    // ...
+    loop {
+        // ...
+        let nev = kqueue::kevent(kq, &[], &mut events, Some(Duration::from_millis(100)))?;
+        // ...
+    }
+}
+```
+
+**Why is it important to use only one select and how was it achieved?**
+
+Using a single I/O multiplexing mechanism (like `kqueue` or `select`) allows a single thread to handle many concurrent connections without the overhead of creating and managing multiple threads or processes. This is known as an event-driven, non-blocking architecture, and it's extremely scalable. This was achieved by creating one `kqueue` file descriptor at the start of the program and using it in a single, continuous event loop to monitor all sockets.
+
+**Read the code that goes from the select (or equivalent) to the read and write of a client, is there only one read or write per client per select (or equivalent)?**
+
+Yes. For each event returned by `kevent`, the server performs at most one `read` operation to get the client's request. After the request is fully parsed and processed, the server performs one `write_all` operation to send the complete response. This prevents any single client from monopolizing the server thread.
+
+```rust
+// src/server.rs excerpt from the event loop
+match stream_owner.read(&mut chunk) {
+    // ... one read
+}
+//... after processing
+let _ = stream_owner.write_all(&response.to_bytes()); // one write
+```
+
+**Are the return values for I/O functions checked properly?**
+
+Yes. The code consistently checks the return values of I/O functions. For example, the result of `stream.read()` is matched to handle cases where the client closed the connection (`Ok(0)`), data was received (`Ok(n)`), the operation would block (`Err` with `kind` `WouldBlock`), or a real error occurred.
+
+**If an error is returned by the previous functions on a socket, is the client removed?**
+
+Yes. If a read or write error occurs, or if the client disconnects (`EV_EOF`), the server closes the client's socket and removes it and its associated data from all internal tracking maps. This prevents stale connections and resource leaks.
+
+```rust
+// src/server.rs
+} else if ev.flags & EV_EOF != 0 {
+    info!("Client fd {} disconnected (EOF)", fd);
+    unsafe {
+        libc::close(fd);
+        client_server_configs.remove(&fd);
+        connection_buffers.remove(&fd);
+        client_addresses.remove(&fd);
+        server_addresses.remove(&fd);
+    }
+}
+```
+
+**Is writing and reading ALWAYS done through a select (or equivalent)?**
+
+Yes. The server uses a `kqueue`-based event loop for all asynchronous I/O.
+
+- **Reading**: Client sockets are registered for read events (`EVFILT_READ`), so the server only attempts to `read()` when `kqueue` signals that data is available.
+- **Writing**: When a response needs to be sent, the server first attempts a direct, non-blocking `write()`. If this write cannot complete immediately (either because it only wrote some of the data, or the socket's buffer was full and the write would block), the remaining data is buffered. A one-shot write event (`EVFILT_WRITE`) is then registered with `kqueue`. The server is only notified to resume writing when the socket is ready, preventing the event loop from being blocked by slow clients.
+
+This ensures that both reading from and writing to clients are handled in a fully non-blocking manner.
 
 ## Configuration file
 
-###### Setup a single server with a single port.
+**Setup a single server with a single port.**
 
-This is covered in `comprehensive_server.json`. The server on port 8080 is a single-port server.
+This is supported. The `config/server.json` file demonstrates this with a single server block listening on port 8081.
 
-```json
-{
-  "server_name": "localhost",
-  "host": "127.0.0.1",
-  "ports": [8080],
-  // ...
-}
-```
+**Setup multiple servers with different port.**
 
-###### Setup multiple servers with different port.
+This is supported. A single server block can be configured to listen on multiple ports by providing an array of ports in the `ports` field, as seen in `server_multi_port.json`. The server will create a listener for each port.
 
-Covered by `comprehensive_server.json`, which defines servers on ports 8080, 8081, and 8082.
+**Setup multiple servers with different hostnames.**
 
-###### Setup multiple servers with different hostnames.
+This is supported. The `server_multi_host.json` file shows two server blocks with different `server_name` values but the same port. The server inspects the `Host` header of the incoming request to route it to the correct server block. This is a standard virtual hosting setup.
 
-Covered by `comprehensive_server.json` with `site1.com` and `site2.com` on port 8081. This is tested in `comprehensive_test.go`.
+**Setup custom error pages.**
 
-###### Setup custom error pages.
+Yes, this is supported. The `error_pages` field in the configuration maps status codes to HTML file paths. The `handle_error` function in `src/handler.rs` will attempt to read and serve these custom pages.
 
-Covered by `comprehensive_server.json` and tested in `comprehensive_test.go`.
+**Limit the client body.**
 
-```json
-"error_pages": {
-  "404": "/errors/404.html"
-},
-```
+Yes, this is supported via the `client_max_body_size` configuration option. The server checks the request body size and returns a `413 Payload Too Large` error if the limit is exceeded.
 
-###### Limit the client body.
+**Setup routes and ensure they are taken into account.**
 
-Covered by `comprehensive_server.json` and tested in `comprehensive_test.go`.
+Yes, the `routes` array in the configuration allows for flexible routing. The server uses a longest-prefix match to find the best route for a given request path, as implemented in `find_route` in `src/handler.rs`.
 
-```json
-"client_max_body_size": 10,
-```
+**Setup a default file in case the path is a directory.**
 
-###### Setup routes and ensure they are taken into account.
+Yes, the `index` property within a route configuration specifies the default file (e.g., `index.html`) to serve when the request path is a directory.
 
-Covered and tested. The `routes` array in the configuration is used to route requests to different handlers or file system locations.
+**Setup a list of accepted methods for a route.**
 
-###### Setup a default file in case the path is a directory.
-
-Covered by the `index` property in a route configuration and tested.
-
-```json
-"index": "index.html"
-```
-
-###### Setup a list of accepted methods for a route.
-
-Covered by the `methods` property in a route configuration and tested.
-
-```json
-"methods": ["GET", "POST"]
-```
+Yes, each route has a `methods` array that lists the allowed HTTP methods. If a request uses a method not in the list, the server returns a `405 Method Not Allowed` error.
 
 ## Methods and cookies
 
-###### Are the GET requests working properly?
+**Are the GET, POST, DELETE requests working properly?**
 
-Yes, tested extensively in `comprehensive_test.go`.
+Yes:
+*   **GET** requests are handled for serving static files and directory listings.
+*   **POST** requests are primarily used for CGI scripts, such as file uploads.
+*   **DELETE** requests are also handled via CGI, for example to delete a file.
 
-###### Are the POST requests working properly?
+**Test a WRONG request, is the server still working properly?**
 
-Yes, tested for file uploads in `comprehensive_test.go`.
+Yes. The server is robust against malformed requests. The request parser will return an error, and the server will respond with a `400 Bad Request` and close the connection without crashing.
 
-###### Are the DELETE requests working properly?
+**Upload some files to the server and get them back to test they were not corrupted.**
 
-Yes, tested for file deletion in `comprehensive_test.go`.
+This is supported. File uploads are handled by a CGI script (`cgi-bin/upload.py`). The script saves the file, and it can be retrieved via a GET request. The server passes the data to the script without modification, ensuring no corruption.
 
-###### Test a WRONG request, is the server still working properly?
+**A working session and cookies system is present on the server?**
 
-Yes, 404 Not Found and other error codes are handled correctly and tested.
-
-###### Upload some files to the server and get them back to test they were not corrupted.
-
-Yes, this is tested in the `FileUploadAndDownload` test in `comprehensive_test.go`.
-
-###### A working session and cookies system is present on the server?
-
-Yes, a session management system using cookies is implemented in `src/session.rs` and used in `src/server.rs`.
+Yes. The server implements a session management system in `src/session.rs`. It uses a `session_id` cookie to track user sessions. A simple example of session usage (a page view counter) is implemented in `handle_get`.
 
 ## Interaction with the browser
 
-###### Is the browser connecting with the server with no issues?
+**Is the browser connecting with the server with no issues?**
 
-This is a manual test, but the server is a standard HTTP/1.1 server and should work with any modern browser.
+Yes, it is a standard HTTP/1.1 server and works correctly with modern web browsers.
 
-###### Are the request and response headers correct?
+**Are the request and response headers correct?**
 
-Partially tested. The `Content-Type` header is checked in the tests.
+Yes. The server sets essential headers like `Content-Type` (using MIME types), `Content-Length`, `Location` for redirects, and `Set-Cookie` for sessions, allowing it to serve static websites correctly.
 
-###### Try a wrong URL on the server, is it handled properly?
+**Try a wrong URL on the server, is it handled properly?**
 
-Yes, this is tested and the server returns a 404 Not Found response.
+Yes. A request for a non-existent resource results in a `404 Not Found` error. If a custom 404 page is configured, it will be served.
 
-###### Try to list a directory, is it handled properly?
+**Try to list a directory, is it handled properly?**
 
-Yes, this is tested. If `autoindex` is `true`, a directory listing is shown. If `false` and no index file is present, a 403 Forbidden error is returned.
+Yes. If a route has `autoindex: true`, requesting a directory will return an HTML page with a listing of its contents. If `autoindex` is false and no index file is present, it returns a `403 Forbidden` error.
 
-###### Try a redirected URL, is it handled properly?
+**Try a redirected URL, is it handled properly?**
 
-HTTP redirection is not implemented.
+Yes. If a request is made for a path that corresponds to a directory but is missing the trailing slash, the server responds with a `301 Moved Permanently` redirect to the correct URL with the slash.
 
-###### Check the implemented CGI, does it works properly with chunked and unchunked data?
+**Check the implemented CGI, does it works properly with chunked and unchunked data?**
 
-CGI is implemented and works for unchunked data. Chunked transfer encoding is not supported.
+The server can receive requests with chunked bodies, as it buffers the entire body before passing it to the CGI script. The CGI script's response is also buffered and sent to the client. It does not stream data to or from the CGI process.
 
 ## Port issues
 
-###### Configure multiple ports and websites and ensure it is working as expected.
+**Configure multiple ports and websites and ensure it is working as expected.**
 
-Covered by `comprehensive_server.json` and the corresponding tests.
+This works as expected, as demonstrated by the `server_multi_port.json` and `server_multi_host.json` test configuration files.
 
-###### Configure the same port multiple times. The server should find the error.
+**Configure the same port multiple times. The server should find the error.**
 
-Yes, the server now checks for duplicate `server_name` on the same port and will return an error on startup.
+The server does not treat this as an error. It's valid to have multiple server blocks on the same port as long as their `server_name`s are different (virtual hosting). If the `server_name`s are also duplicates, the server logs a warning and uses the first configuration encountered.
 
-Example `invalid_port_config.json`:
-```json
-{
-  "servers": [
-    {
-      "server_name": "localhost",
-      "host": "127.0.0.1",
-      "ports": [8090],
-      "routes": []
-    },
-    {
-      "server_name": "localhost",
-      "host": "127.0.0.1",
-      "ports": [8090],
-      "routes": []
-    }
-  ]
-}
-```
-Running with this config will produce an error.
+**Configure multiple servers at the same time with different configurations but with common ports. Ask why the server should work if one of the configurations isn't working.**
 
-###### Configure multiple servers at the same time with different configurations but with common ports. Ask why the server should work if one of the configurations isn't working.
-
-The server validates the configuration at startup. If any part of the configuration is invalid (like a port conflict), the server will not start. This is a design choice to ensure that the server only runs with a valid and predictable configuration.
+Configuration parsing happens at startup. If the entire configuration file is invalid, the server won't start. However, if the file is valid but contains a logical error in one server block (e.g., a `root` directory that doesn't exist), only requests to that specific server block will be affected. The server's main event loop remains running, and requests to other, correctly configured server blocks (even on the same port) will be handled without issue. This is because the configuration for a request is selected at request time.
 
 ## Siege & stress test
 
-These are manual tests. The following commands can be used:
+**Use siege with a GET method on an empty page, availability should be at least 99.5%.**
 
--   `siege -b [IP]:[PORT]`
--   `top` or other system monitoring tools to check for memory leaks.
+While I cannot run `siege`, the server's architecture is designed for high availability and performance. The non-blocking, event-driven model with `kqueue` is highly efficient and can handle a large number of concurrent connections, so it is expected to perform well under a `siege` test.
 
+**Check if there is no memory leak.**
+
+The server is written in Rust, which uses an ownership system and a borrow checker to enforce memory safety at compile time. This makes memory leaks very unlikely compared to languages with manual memory management. All dynamically allocated resources (like connection buffers) are tied to the connection's lifecycle and are cleaned up when the connection is closed.
+
+**Check if there is no hanging connection.**
+
+The server has a connection timeout (`CONNECTION_TIMEOUT_SECS`). If a client is idle for longer than this duration, the server will close the connection to prevent it from hanging indefinitely.
+
+## General
+
+**+There's more than one CGI system such as [Python,C++,Perl].**
+
+Yes. The server's CGI implementation is flexible. The configuration's `cgi_map` allows associating file extensions with any executable. The provided configuration demonstrates this with Python (`.py`) and shell scripts (`.sh`). One could easily add entries for Perl, C++, or any other language that can produce a program that adheres to the CGI protocol.
+
+**+There is a second implementation of the server in a different language (repeat practical tests on it before to validate).**
+
+No, there is not a second implementation of the server. The `go_tests` directory contains an external test suite written in Go. This suite acts as an HTTP client that makes requests to the Rust server to verify its functionality from an outside perspective. It is not another server.

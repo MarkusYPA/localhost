@@ -3,7 +3,7 @@ import sys
 import datetime
 
 def log(message):
-    with open('python.log', 'a') as f:
+    with open('./logs/python.log', 'a') as f:
         f.write(f"{datetime.datetime.now()}: {message}\n")
 
 def main():
