@@ -132,37 +132,50 @@ By default, the server will attempt to load configuration files from a directory
 
     The server will load only the specified `.json` file. If the file is invalid, the server will exit with an error.
 
-## Testing
+## Testing & CI/CD
 
-### Unit Tests
+This project uses a multi-layered testing strategy, automated via **GitHub Actions**.
 
-To run unit tests:
+### 1. GitHub Actions (CI/CD)
 
+The pipeline is defined in `.github/workflows/ci.yml`. It automatically runs on every push or pull request to the `main` branch and performs the following:
+- **Linting**: Checks code formatting (`rustfmt`) and runs `clippy` for static analysis.
+- **Rust Tests**: Executes `cargo test` (unit and integration).
+- **Go Integration Tests**: Builds the server, starts it in the background, and runs the external Go test suite.
+
+> **Note**: The CI runs on `macos-latest` because the server uses `kqueue`, which is specific to BSD-based systems.
+
+### 2. Local Testing
+
+#### Unit & Rust Integration Tests
+These tests are self-contained and manage the server lifecycle internally where necessary.
 ```bash
-cargo test --lib
+cargo test
 ```
+To edit these, modify files in `src/` (for unit tests `#[cfg(test)]`) or `tests/integration_test.rs`.
 
-### Integration Tests
+#### Go Integration Tests
+These tests act as a "black-box" client, verifying the server's behavior from the outside. They require the server to be running.
 
-Integration tests are located in the `tests/` directory and verify the server's behavior end-to-end. To run integration tests:
+**Running locally:**
+1. Start the server:
+   ```bash
+   cargo run --release -- --config comprehensive_server.json
+   ```
+2. In a new terminal, run the tests:
+   ```bash
+   cd go_tests/
+   go test -v .
+   ```
 
+**How to edit:**
+- Logic is located in `go_tests/comprehensive_test.go`.
+- These tests are ideal for verifying HTTP compliance, CGI execution, and multi-host behavior without mocking internal Rust structures.
+
+### 3. Automated Local Shell Script
+If you want to run the Go tests locally without manually managing two terminals, you can use a pattern similar to our CI:
 ```bash
-cargo test --test integration_test
-```
-
-### Golang tests
-
-In order to make sure the auditor can check tests behavior, some tests are written on Golang.
-
-Start the server in one terminal with the comprehensive configuration:
-```bash
-cargo run --release -- --config comprehensive_server.json
-```
-
-Run tests in another terminal:
-```bash
-cd go_tests/
-go test
+./target/release/http_server --config comprehensive_server.json & SERVER_PID=$!; sleep 2; cd go_tests && go test -v .; kill $SERVER_PID
 ```
 
 ### Incorrect cofiguration test
