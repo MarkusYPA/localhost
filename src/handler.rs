@@ -199,13 +199,6 @@ fn list_directory(
 
     match fs::read_dir(path) {
         Ok(entries) => {
-            /* for entry in entries {
-                if let Ok(entry) = entry {
-                    let file_name = entry.file_name().to_string_lossy().to_string();
-                    let link = format!("{}/{file_name}", request_path.trim_end_matches('/'));
-                    body.push_str(&format!("<li><a href=\"{link}\">{file_name}</a></li>"));
-                }
-            } */
             for entry in entries.flatten() {
                 let file_name = entry.file_name().to_string_lossy().to_string();
                 let link = format!("{}/{file_name}", request_path.trim_end_matches('/'));

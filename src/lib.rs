@@ -65,7 +65,6 @@ pub fn init(args: &Args) -> Result<Vec<ServerConfig>, Box<dyn std::error::Error>
         for entry in fs::read_dir(&path)? {
             let entry = entry?;
             let file_path = entry.path();
-            //if file_path.is_file() && file_path.extension().map_or(false, |ext| ext == "json") {
             if file_path.is_file() && file_path.extension().is_some_and(|ext| ext == "json") {
                 let file_name = file_path.file_name().unwrap().to_string_lossy().to_string();
                 match fs::read_to_string(&file_path) {
