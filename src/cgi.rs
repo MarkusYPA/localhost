@@ -97,7 +97,8 @@ fn handle_cgi_internal(
             ];
 
             let path_info = to_cstring(request.path.as_bytes()).map_err(|_| libc::_exit(1))?;
-            let request_method = to_cstring(request.method.as_bytes()).map_err(|_| libc::_exit(1))?;
+            let request_method =
+                to_cstring(request.method.as_bytes()).map_err(|_| libc::_exit(1))?;
             let query_string = to_cstring(
                 request
                     .query_params
@@ -116,7 +117,8 @@ fn handle_cgi_internal(
                     .unwrap_or_default(),
             )
             .map_err(|_| libc::_exit(1))?;
-            let content_length = to_cstring(request.body.len().to_string().as_bytes()).map_err(|_| libc::_exit(1))?;
+            let content_length = to_cstring(request.body.len().to_string().as_bytes())
+                .map_err(|_| libc::_exit(1))?;
 
             let mut env_vars = Vec::new();
             env_vars.push(

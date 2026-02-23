@@ -39,9 +39,7 @@ fn test_get_index() {
 
     // Check the body
     let body = resp.text().unwrap();
-    assert!(
-        body.contains("Hello from site 1!")
-    );
+    assert!(body.contains("Hello from site 1!"));
 }
 
 #[test]

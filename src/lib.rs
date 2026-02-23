@@ -88,7 +88,11 @@ pub fn init(args: &Args) -> Result<Vec<ServerConfig>, Box<dyn std::error::Error>
         let server_config = config::parse_config(&content)?;
         server_configs.push(server_config);
     } else {
-        return Err(format!("Config path '{}' is not a valid file or directory", args.config).into());
+        return Err(format!(
+            "Config path '{}' is not a valid file or directory",
+            args.config
+        )
+        .into());
     }
 
     Ok(server_configs)

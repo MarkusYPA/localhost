@@ -24,14 +24,16 @@ fn parse_chunked_body(body_buffer: &[u8]) -> Result<Option<(Vec<u8>, usize)>, &s
         // Find the end of the chunk size line
         if let Some(i) = body_buffer[cursor..].windows(2).position(|w| w == b"\r\n") {
             let size_line_end = cursor + i;
-            let size_str = std::str::from_utf8(&body_buffer[cursor..size_line_end]).map_err(|_| "Invalid UTF-8 in chunk size")?;
-            let chunk_size = usize::from_str_radix(size_str, 16).map_err(|_| "Invalid chunk size")?;
+            let size_str = std::str::from_utf8(&body_buffer[cursor..size_line_end])
+                .map_err(|_| "Invalid UTF-8 in chunk size")?;
+            let chunk_size =
+                usize::from_str_radix(size_str, 16).map_err(|_| "Invalid chunk size")?;
 
             cursor = size_line_end + 2; // Move past \r\n
 
             if chunk_size == 0 {
                 // End of chunks
-                if body_buffer.len() >= cursor + 2 && &body_buffer[cursor..cursor+2] == b"\r\n" {
+                if body_buffer.len() >= cursor + 2 && &body_buffer[cursor..cursor + 2] == b"\r\n" {
                     return Ok(Some((dechunked_body, cursor + 2)));
                 } else {
                     return Ok(None); // Incomplete final chunk terminator
@@ -44,10 +46,9 @@ fn parse_chunked_body(body_buffer: &[u8]) -> Result<Option<(Vec<u8>, usize)>, &s
             }
 
             dechunked_body.extend_from_slice(&body_buffer[cursor..chunk_end]);
-            
+
             // Move cursor past chunk data and trailing \r\n
             cursor = chunk_end + 2;
-
         } else {
             return Ok(None); // Incomplete chunk size line
         }
@@ -60,7 +61,8 @@ pub fn parse_request_from_buffer(buffer: &[u8]) -> Result<Option<(Request, usize
         None => return Ok(None), // Incomplete headers
     };
 
-    let headers_str = std::str::from_utf8(&buffer[..header_end]).map_err(|_| "Invalid UTF-8 in headers")?;
+    let headers_str =
+        std::str::from_utf8(&buffer[..header_end]).map_err(|_| "Invalid UTF-8 in headers")?;
     let mut lines = headers_str.lines();
 
     let mut request = Request {
@@ -82,7 +84,9 @@ pub fn parse_request_from_buffer(buffer: &[u8]) -> Result<Option<(Request, usize
             for pair in query.split('&') {
                 let mut key_value = pair.split('=');
                 if let (Some(key), Some(value)) = (key_value.next(), key_value.next()) {
-                    request.query_params.insert(key.to_string(), value.to_string());
+                    request
+                        .query_params
+                        .insert(key.to_string(), value.to_string());
                 }
             }
         }
@@ -91,7 +95,9 @@ pub fn parse_request_from_buffer(buffer: &[u8]) -> Result<Option<(Request, usize
     }
 
     for line in lines {
-        if line.is_empty() { break; }
+        if line.is_empty() {
+            break;
+        }
         let mut parts = line.splitn(2, ": ");
         if let (Some(key), Some(value)) = (parts.next(), parts.next()) {
             let header_key = key.to_lowercase();
@@ -99,8 +105,12 @@ pub fn parse_request_from_buffer(buffer: &[u8]) -> Result<Option<(Request, usize
             if header_key == "cookie" {
                 for cookie_pair in header_value.split(';') {
                     let mut cookie_parts = cookie_pair.trim().splitn(2, '=');
-                    if let (Some(cookie_name), Some(cookie_value)) = (cookie_parts.next(), cookie_parts.next()) {
-                        request.cookies.insert(cookie_name.to_string(), cookie_value.to_string());
+                    if let (Some(cookie_name), Some(cookie_value)) =
+                        (cookie_parts.next(), cookie_parts.next())
+                    {
+                        request
+                            .cookies
+                            .insert(cookie_name.to_string(), cookie_value.to_string());
                     }
                 }
             }
@@ -111,7 +121,11 @@ pub fn parse_request_from_buffer(buffer: &[u8]) -> Result<Option<(Request, usize
     let body_buffer = &buffer[header_end..];
     let consumed: usize;
 
-    if request.headers.get("transfer-encoding").map_or(false, |v| v.eq_ignore_ascii_case("chunked")) {
+    if request
+        .headers
+        .get("transfer-encoding")
+        .map_or(false, |v| v.eq_ignore_ascii_case("chunked"))
+    {
         match parse_chunked_body(body_buffer)? {
             Some((body, body_len)) => {
                 request.body = body;
@@ -120,7 +134,9 @@ pub fn parse_request_from_buffer(buffer: &[u8]) -> Result<Option<(Request, usize
             None => return Ok(None), // Incomplete chunked body
         }
     } else if let Some(content_length_str) = request.headers.get("content-length") {
-        let content_length = content_length_str.parse::<usize>().map_err(|_| "Invalid Content-Length")?;
+        let content_length = content_length_str
+            .parse::<usize>()
+            .map_err(|_| "Invalid Content-Length")?;
         if body_buffer.len() >= content_length {
             request.body = body_buffer[..content_length].to_vec();
             consumed = header_end + content_length;
@@ -162,7 +178,8 @@ mod tests {
 
     #[test]
     fn test_post_request_with_body() {
-        let request_str = b"POST /path HTTP/1.1\r\nHost: localhost\r\nContent-Length: 13\r\n\r\nHello, world!";
+        let request_str =
+            b"POST /path HTTP/1.1\r\nHost: localhost\r\nContent-Length: 13\r\n\r\nHello, world!";
         let (request, consumed) = parse_request_from_buffer(request_str).unwrap().unwrap();
         assert_eq!(request.method, "POST");
         assert_eq!(request.path, "/path");
@@ -173,7 +190,8 @@ mod tests {
 
     #[test]
     fn test_request_with_cookies() {
-        let request_str = b"GET / HTTP/1.1\r\nHost: localhost\r\nCookie: key1=value1; key2=value2\r\n\r\n";
+        let request_str =
+            b"GET / HTTP/1.1\r\nHost: localhost\r\nCookie: key1=value1; key2=value2\r\n\r\n";
         let (request, _consumed) = parse_request_from_buffer(request_str).unwrap().unwrap();
         assert_eq!(request.cookies.get("key1").unwrap(), "value1");
         assert_eq!(request.cookies.get("key2").unwrap(), "value2");
@@ -188,7 +206,8 @@ mod tests {
 
     #[test]
     fn test_post_incomplete_body() {
-        let request_str = b"POST /path HTTP/1.1\r\nHost: localhost\r\nContent-Length: 13\r\n\r\nHello";
+        let request_str =
+            b"POST /path HTTP/1.1\r\nHost: localhost\r\nContent-Length: 13\r\n\r\nHello";
         let result = parse_request_from_buffer(request_str).unwrap();
         assert!(result.is_none());
     }

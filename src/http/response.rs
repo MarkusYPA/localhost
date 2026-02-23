@@ -1,6 +1,6 @@
-use std::collections::HashMap;
 use crate::config::SingleServerConfig;
 use crate::http::request::Request;
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct Response {
@@ -10,7 +10,12 @@ pub struct Response {
 }
 
 impl Response {
-    pub fn new(status_code: u16, body: Vec<u8>, config: &SingleServerConfig, request: Option<&Request>) -> Self {
+    pub fn new(
+        status_code: u16,
+        body: Vec<u8>,
+        config: &SingleServerConfig,
+        request: Option<&Request>,
+    ) -> Self {
         let mut headers = HashMap::new();
         let mut connection_type = config.connection_type.clone();
 

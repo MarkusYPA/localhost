@@ -264,7 +264,9 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                                             response.to_bytes(),
                                             &mut connections_activity,
                                         ) {
-                                            error!("Failed to schedule 413 response for fd {fd}: {e}");
+                                            error!(
+                                                "Failed to schedule 413 response for fd {fd}: {e}"
+                                            );
                                         }
                                     } else {
                                         let response = {
