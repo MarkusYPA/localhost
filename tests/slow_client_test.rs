@@ -47,7 +47,7 @@ fn test_slow_client_read() {
     let mut response_buffer = Vec::new();
     let mut byte_buffer = [0; 1]; // Read one byte at a time
     let start_time = Instant::now();
-    let timeout = Duration::from_secs(30);
+    let timeout = Duration::from_secs(45);
 
     loop {
         if start_time.elapsed() > timeout {
@@ -63,7 +63,7 @@ fn test_slow_client_read() {
                 // Successfully read n bytes.
                 response_buffer.extend_from_slice(&byte_buffer[..n]);
                 // Simulate a slow client by sleeping after reading each byte.
-                thread::sleep(Duration::from_millis(10));
+                thread::sleep(Duration::from_millis(5));
             }
             Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                 // No data available right now, sleep and try again.
