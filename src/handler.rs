@@ -7,9 +7,18 @@ use log::{debug, error};
 use std::fs;
 use std::path::Path;
 
-fn handle_error(status_code: u16, config: &SingleServerConfig, request: Option<&Request>) -> Response {
+fn handle_error(
+    status_code: u16,
+    config: &SingleServerConfig,
+    request: Option<&Request>,
+) -> Response {
     if let Some(req) = request {
-        error!("{} {}: {}", req.method, req.path, crate::http::status::reason_phrase(status_code));
+        error!(
+            "{} {}: {}",
+            req.method,
+            req.path,
+            crate::http::status::reason_phrase(status_code)
+        );
     }
     if let Some(error_page_path_str) = config.error_pages.get(&status_code) {
         let current_dir = match std::env::current_dir() {
@@ -31,12 +40,22 @@ fn handle_error(status_code: u16, config: &SingleServerConfig, request: Option<&
             }
             Err(_) => {
                 let reason_phrase = crate::http::status::reason_phrase(status_code);
-                Response::new(status_code, reason_phrase.as_bytes().to_vec(), config, request)
+                Response::new(
+                    status_code,
+                    reason_phrase.as_bytes().to_vec(),
+                    config,
+                    request,
+                )
             }
         }
     } else {
         let reason_phrase = crate::http::status::reason_phrase(status_code);
-        Response::new(status_code, reason_phrase.as_bytes().to_vec(), config, request)
+        Response::new(
+            status_code,
+            reason_phrase.as_bytes().to_vec(),
+            config,
+            request,
+        )
     }
 }
 
@@ -60,10 +79,12 @@ fn try_handle_cgi(
     config: &SingleServerConfig,
     session: &mut Option<&mut Session>,
 ) -> Option<Response> {
-    let relative_path = match request.path.strip_prefix(&route.path) {
+    /* let relative_path = match request.path.strip_prefix(&route.path) {
         Some(path) => path,
         None => return None,
-    };
+    }; */
+    let relative_path = request.path.strip_prefix(&route.path)?;
+
     let relative_path = relative_path.strip_prefix('/').unwrap_or(relative_path);
     let path = Path::new(&route.root).join(relative_path);
 
@@ -144,7 +165,8 @@ fn handle_get(
     if path.is_dir() {
         if !request.path.ends_with('/') {
             let new_path = format!("{}/", request.path);
-            let mut response = Response::new(301, b"Moved Permanently".to_vec(), config, Some(request));
+            let mut response =
+                Response::new(301, b"Moved Permanently".to_vec(), config, Some(request));
             response.headers.insert("Location".to_string(), new_path);
             return response;
         }
@@ -166,18 +188,21 @@ fn handle_get(
     handle_error(404, config, Some(request))
 }
 
-fn list_directory(path: &Path, request_path: &str, config: &SingleServerConfig, request: Option<&Request>) -> Response {
+fn list_directory(
+    path: &Path,
+    request_path: &str,
+    config: &SingleServerConfig,
+    request: Option<&Request>,
+) -> Response {
     let mut body = String::new();
     body.push_str(&format!("<html><body><h1>Index of {request_path}</h1><ul>"));
 
     match fs::read_dir(path) {
         Ok(entries) => {
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    let file_name = entry.file_name().to_string_lossy().to_string();
-                    let link = format!("{}/{file_name}", request_path.trim_end_matches('/'));
-                    body.push_str(&format!("<li><a href=\"{link}\">{file_name}</a></li>"));
-                }
+            for entry in entries.flatten() {
+                let file_name = entry.file_name().to_string_lossy().to_string();
+                let link = format!("{}/{file_name}", request_path.trim_end_matches('/'));
+                body.push_str(&format!("<li><a href=\"{link}\">{file_name}</a></li>"));
             }
         }
         Err(_) => return handle_error(500, config, request),
@@ -185,7 +210,9 @@ fn list_directory(path: &Path, request_path: &str, config: &SingleServerConfig, 
 
     body.push_str("</ul></body></html>");
     let mut response = Response::new(200, body.as_bytes().to_vec(), config, request);
-    response.headers.insert("Content-Type".to_string(), "text/html".to_string());
+    response
+        .headers
+        .insert("Content-Type".to_string(), "text/html".to_string());
     response
 }
 
@@ -202,8 +229,6 @@ fn serve_file(path: &Path, config: &SingleServerConfig, request: Option<&Request
         Err(_) => handle_error(500, config, request),
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {

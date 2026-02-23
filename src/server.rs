@@ -28,7 +28,7 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
         }
     }
 
-    for (_, configs) in &configs_by_port {
+    for configs in configs_by_port.values() {
         let mut names = HashSet::new();
         for config in configs {
             if !names.insert(&config.server_name) {
@@ -201,7 +201,7 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
             } else if ev.filter == EVFILT_READ {
                 // --- Data available from client ---
                 if let Some(server_configs) = client_server_configs.get(&fd) {
-                    let buffer = connection_buffers.entry(fd).or_insert_with(Vec::new);
+                    let buffer = connection_buffers.entry(fd).or_default();
                     let mut stream_owner = unsafe { std::net::TcpStream::from_raw_fd(fd) };
 
                     let mut chunk = [0u8; 4096];
@@ -264,7 +264,9 @@ pub fn run(all_configs: Vec<ServerConfig>) -> std::io::Result<()> {
                                             response.to_bytes(),
                                             &mut connections_activity,
                                         ) {
-                                            error!("Failed to schedule 413 response for fd {fd}: {e}");
+                                            error!(
+                                                "Failed to schedule 413 response for fd {fd}: {e}"
+                                            );
                                         }
                                     } else {
                                         let response = {

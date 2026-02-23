@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Build and Test
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: go_tests/go.mod
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+      - name: Lint with Clippy
+        run: cargo clippy -- -D warnings
+
+      - name: Run Rust unit and integration tests
+        run: cargo test
+
+      - name: Build server for Go integration tests
+        run: cargo build --release
+
+      - name: Run Go integration tests
+        run: |
+          # Start the server in the background
+          ./target/release/http_server --config comprehensive_server.json &
+          SERVER_PID=$!
+          
+          echo "Server started with PID $SERVER_PID"
+          
+          # Wait for the server to be ready (checking port 8080)
+          MAX_RETRIES=15
+          COUNT=0
+          while ! curl -s http://localhost:8080/ > /dev/null; do
+            if [ $COUNT -eq $MAX_RETRIES ]; then
+              echo "Server failed to start in time"
+              kill $SERVER_PID
+              exit 1
+            fi
+            echo "Waiting for server to listen on port 8080... ($COUNT/$MAX_RETRIES)"
+            sleep 2
+            COUNT=$((COUNT + 1))
+          done
+          
+          echo "Server is ready! Running Go tests..."
+          
+          # Run the Go tests
+          cd go_tests
+          go test -v .
+          
+          # Cleanup
+          echo "Shutting down server..."
+          kill $SERVER_PID
