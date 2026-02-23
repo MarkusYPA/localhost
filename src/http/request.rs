@@ -124,7 +124,8 @@ pub fn parse_request_from_buffer(buffer: &[u8]) -> Result<Option<(Request, usize
     if request
         .headers
         .get("transfer-encoding")
-        .map_or(false, |v| v.eq_ignore_ascii_case("chunked"))
+        //.map_or(false, |v| v.eq_ignore_ascii_case("chunked"))
+        .is_some_and(|v| v.eq_ignore_ascii_case("chunked"))
     {
         match parse_chunked_body(body_buffer)? {
             Some((body, body_len)) => {
