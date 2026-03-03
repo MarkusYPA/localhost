@@ -1,0 +1,88 @@
+Localhost Implementation
+Low-Level Networking & Web Protocols
+School Exercise Phase: Systems Development & Quality Assurance
+
+ACADEMIC OBJECTIVES
+Systems Programming
+Demonstrate proficiency in low-level Rust development, focusing on memory safety and system-call interfaces.
+Protocol Compliance
+Implement RFC-compliant HTTP/1.1 parsing and socket-level TCP communication logic from the ground up.
+QA Rigor
+Apply industrial testing methodologies including automated CI pipelines and peer-based code review cycles.
+
+System Architecture
+Event-Driven Engine Design
+
+I/O MULTIPLEXING VIA KQUEUE
+The core engine utilizes the kqueue event notification interface to manage multiple concurrent connections efficiently.
+Scalability: Avoids the thread-per-connection overhead by using an asynchronous event loop.
+Performance: O(1) complexity for event retrieval compared to O(n) for traditional select.
+Event Filters: Tailored handling for EVFILT_READ and EVFILT_WRITE operations.
+
+SOCKET MANAGEMENT
+Managing the lifecycle of non-blocking TCP sockets requires precise state tracking to ensure protocol integrity.
+Cstate = LISTEN, READ_REQ, PROC_HDR, SEND_RES, 
+Our implementation handles partial reads and writes by maintaining per-socket buffers until transactions are complete.
+
+WEB PROTOCOL IMPLEMENTATION
+HTTP/1.1 Parsing
+Handwritten state machine for parsing request lines, headers, and chunks. Strict adherence to RFC 7230 to prevent smuggling and buffer overflows.
+Dynamic Routing
+Utilizing the Host header to map incoming traffic to internal service identifiers or local file system paths.
+
+REQUEST FLOW MECHANICS
+Connection Acceptance: The kqueue listener triggers on new SYNs.
+Buffer Ingestion: Non-blocking read() fills the session buffer.
+Semantic Analysis: Parser identifies the requested method and target.
+Payload Delivery: Response transmitted via non-blocking write().
+
+Testing & Verification
+Ensuring Stability in Lower Layers
+
+MULTI-TIERED TESTING STRATEGY
+Mandatory Peer Reviews: Every commit must be scrutinized by at least one other team member for memory leaks and logic errors.
+Automated Unit Tests: Isolated testing of the HTTP parser and URI builder components to ensure 100% path coverage.
+Manual Scenarios: Intentional injection of malformed packets and large payloads to test error handling and buffer limits.
+Integration Tests: Verifying end-to-end response cycles with various browser clients (Chrome, Safari, Firefox).
+
+GITHUB ACTIONS PIPELINE
+Our Continuous Integration (CI) workflow automates the validation of every code submission.
+Build Validation: Verifies compilation against target toolchains.
+Static Analysis: Uses linters to enforce coding standards.
+Regression Suite: Runs automated tests to ensure existing logic remains intact.
+
+TESTING FRAMEWORK SUMMARY
+Test Layer
+Primary Focus
+Frequency
+Automation Status
+Unit Tests
+Logic & Parsers
+Per Push
+Fully Automated
+Manual Tests
+Browser Compatibility
+Per Feature
+Human-led
+Stress Tests
+kqueue Event Load
+Milestones
+Semi-Automated
+Code Review
+Code Quality
+Per Pull Request
+Manual Process
+
+Q & A
+Technical Discussion on Implementation Details
+github.com/MarkusYPA/localhost
+
+IMAGE SOURCES
+https://dyc3ylug23b1.cloudfront.net/prod/d89b74eac664dbffce3214da9c3b9b75-image.png
+Source: www.helpteaching.com
+https://static.vecteezy.com/system/resources/thumbnails/065/411/596/small/abstract-schematic-of-server-rack-in-minimalist-style-vector.jpg
+Source: www.vecteezy.com
+https://miro.medium.com/1*wzzLb_xz5Mlykcd1bBqDig.png
+Source: medium.com
+https://www.weareha.co.uk/wp-content/uploads/2022/06/devops-250x250-01.svg
+Source: www.weareha.co.uk
