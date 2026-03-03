@@ -20,9 +20,15 @@ Performance: O(1) complexity for event retrieval, ensuring consistent response t
 Event Filters: Precise handling of EVFILT_READ for ingestion and EVFILT_WRITE for buffered delivery.
 
 SOCKET MANAGEMENT
-Managing the lifecycle of non-blocking TCP sockets requires precise state tracking to ensure protocol integrity.
-Connection States: Handled through implicit transitions—Accept (Listener), Read (Ingestion), Parse (HTTP Logic), and Write (Response).
-Resource Control: Strict limits on MAX_CONNECTIONS and automatic cleanup of timed-out sessions via Instant tracking.
+Non-blocking Lifecycle & State Integrity
+
+Implicit State Flow: Accept → Ingest → Process → Deliver
+  • Monitors partial I/O and protocol boundaries via kqueue filters.
+
+Operational Guardrails:
+  • UUID-based session persistence across transactions.
+  • Resource isolation via fixed MAX_CONNECTIONS pool.
+  • Proactive cleanup of dead descriptors via timeouts.
 
 WEB PROTOCOL IMPLEMENTATION
 HTTP/1.1 Parsing
