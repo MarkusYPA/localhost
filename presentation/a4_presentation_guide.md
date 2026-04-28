@@ -13,7 +13,7 @@ Once you receive a positive readiness decision, you can take part in Professiona
 ### Project Scope
 You will present one of the following projects:
 - Java: buy-02
-- Rust: local-host
+- Rust: local-host  
 **The audit is evaluated individually, even though the presentation is done in pairs.**
 
 ### Audit Objective
@@ -36,7 +36,7 @@ Your presentation must be structured around the following themes:
 - Test environments (including CI)
 - Manual vs automated testing
   - Automated testing is mandatory. If the project does not already include automated tests, students are expected to create and present them as part of the audit.
-- Reporting and results
+- Reporting and results  
 **Both team members are expected to actively participate. Read the full brief here.**
 
 ### Evaluation and Outcome
