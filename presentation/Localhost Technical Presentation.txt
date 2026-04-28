@@ -100,7 +100,7 @@ Build Validation: Verifies compilation against the Rust toolchain on target envi
 Static Analysis: Uses Clippy to enforce idiomatic Rust standards and lint for potential errors.
 Regression Suite: Automated execution of integration tests to ensure logic remains intact across commits.
 
-# slide 13 - mid title
+# slide 13 - table
 TESTING FRAMEWORK SUMMARY
 Test Layer
 Primary Focus
