@@ -196,7 +196,7 @@
       <div class="title">QA Rigor</div>
       <div class="desc">
         Industrial testing methodology: automated CI pipelines, peer-based
-        code reviews, and reproducible regression suites.
+        code reviews, and comprehensive testing.
       </div>
       <div class="footnote">CI · Clippy · reqwest harness</div>
     </div>
@@ -456,30 +456,39 @@
   <div class="grid-2" style="flex:1">
     <div class="panel elevated" style="display:flex;flex-direction:column">
       <div class="panel-head">
-        <div class="h-card">HTTP/1.1 Parsing</div>
+        <div class="h-card">Header & Request Line Processing</div>
         <span class="panel-num">RFC 7230</span>
       </div>
-      <div class="body" style="margin-top:8px;margin-bottom:24px">
-        Hand-rolled state machine: request line → headers → optional chunked body.
-        Strict parser refuses ambiguous framing to prevent <span class="accent" style="font-weight:600">request smuggling</span>.
+      
+      <div style="margin-top:24px;display:flex;flex-direction:column;gap:4px">
+        <div class="readout">
+          <span class="k">Request Line</span>
+          <span class="v">Directly extracts Method, Path, and Version. Built-in Query parsing.</span>
+        </div>
+        <div class="readout">
+          <span class="k">Headers</span>
+          <span class="v">Normalized to lowercase for case-insensitive HashMap lookups.</span>
+        </div>
+        <div class="readout">
+          <span class="k">Cookies</span>
+          <span class="v">Dedicated sub-parser for structured SID/State management.</span>
+        </div>
+        <div class="readout">
+          <span class="k">Body (CL)</span>
+          <span class="v">Static Content-Length tracking for deterministic framing.</span>
+        </div>
+        <div class="readout">
+          <span class="k">Body (CH)</span>
+          <span class="v">Dynamic Chunked decoding with hex-size state machine.</span>
+        </div>
       </div>
 
-      <div class="code" style="margin-top:auto">
-<span class="c">// states are explicit. no allocations on the hot path.</span>
-<span class="k">enum</span> <span class="t">State</span> {
-  RequestLine,
-  Headers,
-  Body(<span class="t">Mode</span>),     <span class="c">// ContentLength | Chunked | None</span>
-  Trailer,
-  Done,
-  Error(<span class="t">ParseErr</span>),
-}
-      </div>
-      <div style="display:flex;gap:8px;margin-top:18px;flex-wrap:wrap">
-        <span class="chip"><span class="led"></span>NO ALLOC ON STEADY STATE</span>
+      <div class="tag-strip" style="margin-top:auto">
+        <span class="chip"><span class="led"></span>ZERO ALLOC ON HOT PATH</span>
         <span class="chip"><span class="led"></span>REJECTS DUAL CL+TE</span>
-        <span class="chip"><span class="led"></span>HEADER LIMIT 8 KiB</span>
+        <span class="chip accent"><span class="led"></span>STRICT RFC COMPLIANCE</span>
       </div>
+
     </div>
 
     <div class="panel elevated" style="display:flex;flex-direction:column">
@@ -595,8 +604,7 @@
         <div class="readout"><span class="k">FUNCTIONALITY.MD</span><span class="v">Feature list · usage · config schema</span></div>
         <div class="readout"><span class="k">TESTING.MD</span><span class="v">Protocols · fixtures · failure modes</span></div>
         <div class="readout"><span class="k">RUSTDOC</span><span class="v">Inline · clarifying complex state transitions</span></div>
-        <div class="readout"><span class="k">CHANGELOG</span><span class="v">Per-merge entry · keepachangelog</span></div>
-        <div class="readout" style="border-bottom:none"><span class="k">RFC INDEX</span><span class="v">7230 · 7231 · 7235 referenced inline</span></div>
+        <div class="readout"><span class="k">CHANGELOG</span><span class="v">Per-merge entry </span></div>
       </div>
       <div style="margin-top:28px;font-size:18px;color:var(--steel);line-height:1.55">
         Docs act as the <span class="accent" style="font-weight:600">benchmark</span> — every feature
