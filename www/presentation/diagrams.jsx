@@ -13,7 +13,7 @@ function KqueueDiagram() {
     let raf;
     let start = performance.now();
     const tick = (now) => {
-      setT((now - start) / 1000);
+      setT(Math.max(0, (now - start) / 1000));
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -187,7 +187,7 @@ function RequestFlowDiagram() {
     let raf;
     let start = performance.now();
     const tick = (now) => {
-      setT((now - start) / 1000);
+      setT(Math.max(0, (now - start) / 1000));
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -207,8 +207,8 @@ function RequestFlowDiagram() {
   const W = 1500 + PAD*2, H = 360;
   const colW = (W - PAD*2 - 40) / stages.length;
 
-  // active stage cycles
-  const activeIdx = Math.floor(t * 1.2) % stages.length;
+  // active stage cycles - ensure non-negative for safety
+  const activeIdx = Math.max(0, Math.floor(t * 1.2)) % stages.length;
   const subPhase  = (t * 1.2) % 1;
 
   return (
@@ -262,7 +262,7 @@ function RequestFlowDiagram() {
 
               {/* progress on active */}
               {isActive && (
-                <rect x={x-90} y="198" width={200 * subPhase} height="2" fill="#1E5BFF"/>
+                <rect x={x-90} y="198" width={Math.max(0, 200 * subPhase)} height="2" fill="#1E5BFF"/>
               )}
               {/* led */}
               <circle cx={x+95} cy="51" r="4"
@@ -298,7 +298,7 @@ function RequestFlowDiagram() {
           <text fontFamily="JetBrains Mono" fontSize="11" fill="#6B7689" letterSpacing="2">
             <tspan>BUDGET 10ms</tspan>
             <tspan dx="30" fill="#0B1220">USED {(subPhase*2).toFixed(1)}ms</tspan>
-            <tspan dx="30" fill="#0B1220">STAGE {stages[activeIdx].n}</tspan>
+            <tspan dx="30" fill="#0B1220">STAGE {stages[activeIdx]?.n || ''}</tspan>
             <tspan dx="30" fill="#1E5BFF">● TRANSMITTING</tspan>
           </text>
         </g>
@@ -315,7 +315,7 @@ function CIPipeline() {
   useEffect(() => {
     let raf;
     const start = performance.now();
-    const tick = (now) => { setT((now - start)/1000); raf = requestAnimationFrame(tick); };
+    const tick = (now) => { setT(Math.max(0, (now - start)/1000)); raf = requestAnimationFrame(tick); };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, []);
@@ -363,7 +363,7 @@ function CIPipeline() {
                 <text x={xs+12} y="135" fontFamily="JetBrains Mono" fontSize="11" fill={done || active ? "rgba(255,255,255,0.7)" : "#6B7689"}>{j.d.toFixed(1)}s</text>
                 {/* progress on active */}
                 {active && (
-                  <rect x={xs} y="146" width={(xw-6) * ((cycle - start)/j.d)} height="2" fill="#1E5BFF"/>
+                  <rect x={xs} y="146" width={Math.max(0, (xw-6) * ((cycle - start)/j.d))} height="2" fill="#1E5BFF"/>
                 )}
                 {/* status tick */}
                 {done && (
