@@ -109,7 +109,7 @@
       <div class="tag-strip">
         <span class="chip"><span class="led"></span>RUST · 1.78</span>
         <span class="chip"><span class="led"></span>SYSTEMS PROGRAMMING</span>
-        <span class="chip"><span class="led"></span>HTTP/1.1 · RFC 7230</span>
+        <span class="chip"><span class="led"></span>RFC 7230 · 7231 · 6265</span>
         <span class="chip accent"><span class="led"></span>QA · CI/CD</span>
       </div>
     </div>
@@ -120,7 +120,7 @@
       </div>
       <div style="font-size:18px;line-height:1.7;color:var(--ink)">
 <span style="color:var(--accent)">$</span> uname -a<br/>
-<span style="color:var(--steel)">Darwin host 23.5 arm64 RELEASE_ARM64</span><br/>
+<span style="color:var(--steel)">Darwin host 25.3.0 arm64 RELEASE_ARM64</span><br/>
 <span style="color:var(--accent)">$</span> cargo run --release<br/>
 <span style="color:var(--steel)">  Compiling localhost v1.0.0</span><br/>
 <span style="color:var(--steel)">  Finished release [optimized] in 18.42s</span><br/>
@@ -184,7 +184,7 @@
         RFC-compliant HTTP/1.1 parsing and socket-level TCP communication
         using non-blocking primitives end-to-end.
       </div>
-      <div class="footnote">RFC 7230 · 7231 · 7235</div>
+      <div class="footnote">RFC 7230 (Message Format and Routing) · RFC 7231 (Semantics and Content) · RFC 6265 (HTTP State Management Mechanism)</div>
     </div>
 
     <div class="spec-card">
@@ -457,7 +457,7 @@
     <div class="panel elevated" style="display:flex;flex-direction:column">
       <div class="panel-head">
         <div class="h-card">Header & Request Line Processing</div>
-        <span class="panel-num">RFC 7230</span>
+        <span class="panel-num">RFC 7230 · 7231</span>
       </div>
       
       <div style="margin-top:24px;display:flex;flex-direction:column;gap:4px">
@@ -598,18 +598,18 @@
     <div class="panel elevated">
       <div class="panel-head">
         <div class="h-card">Document Structure</div>
-        <span class="panel-num">B</span>
+        <span class="panel-num">RELIABILITY · COMPLIANCE</span>
       </div>
       <div class="col" style="gap:0">
-        <div class="readout"><span class="k">FUNCTIONALITY.MD</span><span class="v">Feature list · usage · config schema</span></div>
-        <div class="readout"><span class="k">TESTING.MD</span><span class="v">Protocols · fixtures · failure modes</span></div>
-        <div class="readout"><span class="k">RUSTDOC</span><span class="v">Inline · clarifying complex state transitions</span></div>
-        <div class="readout"><span class="k">CHANGELOG</span><span class="v">Per-merge entry </span></div>
+        <div class="readout"><span class="k">README.MD</span><span class="v">Canonical manual & architecture overview</span></div>
+        <div class="readout"><span class="k">FUNCTIONALITY.MD</span><span class="v">Feature list · config schema · usage</span></div>
+        <div class="readout"><span class="k">TESTING.MD</span><span class="v">ASan · Go integration · Failure modes</span></div>
+        <div class="readout"><span class="k">AUDIT.MD</span><span class="v">01Edu specification & audit criteria</span></div>
       </div>
       <div style="margin-top:28px;font-size:18px;color:var(--steel);line-height:1.55">
         Docs act as the <span class="accent" style="font-weight:600">benchmark</span> — every feature
-        (CGI, sessions, kqueue) is verified to meet RFC standards via the
-        protocols in <span class="mono">testing.md</span>.
+        (CGI, sessions, kqueue) is verified against the 01Edu spec via the
+        protocols defined in <span class="mono">docs/testing.md</span>.
       </div>
     </div>
   </div>
