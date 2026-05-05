@@ -195,7 +195,7 @@
       <div class="icon mono">✓</div>
       <div class="title">QA Rigor</div>
       <div class="desc">
-        Industrial testing methodology: automated CI pipelines, peer-based
+        Industrial testing methodology: PR-driven CI pipelines, peer-based
         code reviews, and comprehensive testing.
       </div>
       <div class="footnote">CI · Clippy · reqwest harness</div>
@@ -585,7 +585,7 @@
       <ul class="bullets" style="margin-top:8px;margin-bottom:20px">
         <li>Derived from the <span class="accent" style="font-weight:600">01Edu spec</span> and its audit criteria.</li>
         <li><span class="mono">README.md</span> — primary technical manual.</li>
-        <li>Audit criteria pinned in CI: fail one, fail the build.</li>
+        <li>Audit criteria verified on PR creation: fail one, fail the build.</li>
       </ul>
       <div style="padding:16px 18px;border:1px solid var(--rule);background:#fff;font-family:'JetBrains Mono',monospace;font-size:14px;line-height:1.55">
 <span class="muted">localhost/</span> &nbsp; <span class="muted">// repo root</span><br/>
@@ -791,14 +791,14 @@
           <td class="mono muted">01</td>
           <td><strong>Unit Tests</strong></td>
           <td>Logic &amp; parsers</td>
-          <td class="mono">Per push</td>
+          <td class="mono">Per PR</td>
           <td><span class="pill full"><span class="led"></span>FULLY AUTOMATED</span></td>
         </tr>
         <tr class="zebra">
           <td class="mono muted">02</td>
           <td><strong>Integration Tests</strong></td>
           <td>Server scenarios · reqwest harness</td>
-          <td class="mono">Per push</td>
+          <td class="mono">Per PR</td>
           <td><span class="pill full"><span class="led"></span>FULLY AUTOMATED</span></td>
         </tr>
         <tr>

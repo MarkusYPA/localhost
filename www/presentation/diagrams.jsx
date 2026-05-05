@@ -379,7 +379,7 @@ function CIPipeline() {
           <rect x="0" y="0" width="1240" height="100" fill="#F4F6FA" stroke="#D4DAE5"/>
           <g transform="translate(20 28)">
             <text fontFamily="JetBrains Mono" fontSize="11" fill="#6B7689" letterSpacing="2">EVENT</text>
-            <text y="28" fontFamily="JetBrains Mono" fontSize="20" fontWeight="600" fill="#0B1220">push → main</text>
+            <text y="28" fontFamily="JetBrains Mono" fontSize="20" fontWeight="600" fill="#0B1220">pull_request → open</text>
           </g>
           <g transform="translate(280 28)">
             <text fontFamily="JetBrains Mono" fontSize="11" fill="#6B7689" letterSpacing="2">RUNNER</text>
