@@ -1,0 +1,140 @@
+
+# slide 1 - introduction
+localhost
+Low-Level Networking & Web Protocols
+Systems Development & Quality Assurance
+
+# slide 2
+ACADEMIC OBJECTIVES
+Systems Programming
+Low-level Rust development, focusing on memory safety and direct system-call interfaces via libc.
+
+
+Protocol Compliance
+RFC-compliant HTTP/1.1 parsing and socket-level TCP communication logic using non-blocking primitives.
+
+
+QA Rigor
+Industrial testing methodologies including automated CI pipelines and peer-based code review cycles.
+
+
+# slide 3
+TEAM COLLABORATION
+Communication Channels:
+  • In-person coordination at home and classroom
+  • WhatsApp for urgent pings
+  • GitHub Issues/PRs for persistent records and formal reviews
+
+Advantages & Dynamics:
+  • Immediate resolution of architecture blockers through face-to-face discussion
+  • Informal decisions are formalized into GitHub issues to ensure a traceable development history
+
+# slide 4 - section 1
+System Architecture
+Event-Driven Engine Design
+
+# slide 5
+I/O MULTIPLEXING VIA KQUEUE
+The core engine utilizes the kqueue event notification interface to manage multiple concurrent connections efficiently on macOS.
+
+
+Scalability: Avoids thread-per-connection overhead by using an asynchronous event loop based on file descriptor monitoring.
+Performance: O(1) complexity for event retrieval, ensuring consistent response times under heavy load
+Event Filters: Precise handling of EVFILT_READ for ingestion and EVFILT_WRITE for buffered delivery.
+
+
+# slide 6
+SOCKET MANAGEMENT
+Non-blocking Lifecycle & State Integrity
+
+Implicit State Flow: Accept → Ingest → Process → Deliver
+  • Monitors partial I/O and protocol boundaries via kqueue filters.
+
+Operational Guardrails:
+  • UUID-based session persistence across transactions.
+  • Resource isolation via fixed MAX_CONNECTIONS pool.
+  • Proactive cleanup of dead descriptors via timeouts.
+
+# slide 7
+WEB PROTOCOL IMPLEMENTATION
+HTTP/1.1 Parsing
+Handwritten state machine for parsing request lines, headers, and chunks. Strict adherence to RFC 7230 to prevent protocol smuggling.
+Dynamic Routing
+Utilizing the Host header to map traffic to virtual servers. Support for CGI (Python/Bash) and session management via UUID cookies.
+
+# slide 8
+REQUEST FLOW MECHANICS
+Connection Acceptance: The kqueue listener identifies new SYNs and registers the client FD.
+Buffer Ingestion: Non-blocking read() operations fill per-session buffers until headers/body are complete.
+Semantic Analysis: The internal HTTP parser identifies the method, target, and host to find the appropriate handler.
+Payload Delivery: Responses are buffered and transmitted via non-blocking write() when EVFILT_WRITE is triggered.
+
+# slide 9
+REQUIREMENTS & DOCUMENTATION
+Mapping Goals to Implementation
+
+Source of Truth:
+  • 01Edu platform specs and technical audit criteria
+  • README.md serves as the primary technical manual for features and usage
+
+Document Structure:
+  • Dedicated documentation for "Functionality" and "Testing Protocols"
+  • Inline Rust comments clarifying complex non-blocking state transitions
+  • Docs act as the benchmark for verifying that features (CGI, sessions, kqueue) meet RFC standards
+
+# slide 10 - section 2
+Testing & Verification
+Ensuring Stability in Lower Layers
+
+# slide 11
+MULTI-TIERED TESTING STRATEGY
+Mandatory Peer Reviews: Focus on memory safety, logic flow, and error handling in Rust.
+Automated Unit Tests: Isolated testing of the HTTP parser, URI builder, and Session Manager components.
+Manual Scenarios: Injection of malformed packets and stress testing the kqueue event loop.
+Integration Tests: End-to-end cycles using reqwest to verify server behavior against realistic HTTP traffic.
+
+# slide 12
+GITHUB ACTIONS PIPELINE
+Our Continuous Integration (CI) workflow automates the validation of every code submission.
+Build Validation: Verifies compilation against the Rust toolchain on target environments.
+Static Analysis: Uses Clippy to enforce idiomatic Rust standards and lint for potential errors.
+Regression Suite: Automated execution of integration tests to ensure logic remains intact across commits.
+
+# slide 13 - table
+TESTING FRAMEWORK SUMMARY
+Test Layer
+Primary Focus
+Frequency
+Automation Status
+Unit Tests
+Logic & Parsers
+Per Push
+Fully Automated
+Integration Tests
+Server Scenarios
+Per Push
+Fully Automated
+Manual Tests
+Feature Validation
+Per Feature
+Human-led
+Stress Tests
+Load & kqueue
+Milestones
+Semi-Automated
+
+# slide 14 - outro
+Q & A
+Technical Discussion on Implementation Details
+github.com/MarkusYPA/localhost
+
+# slide 15
+IMAGE SOURCES
+https://dyc3ylug23b1.cloudfront.net/prod/d89b74eac664dbffce3214da9c3b9b75-image.png
+Source: www.helpteaching.com
+https://static.vecteezy.com/system/resources/thumbnails/065/411/596/small/abstract-schematic-of-server-rack-in-minimalist-style-vector.jpg
+Source: www.vecteezy.com
+https://miro.medium.com/1*wzzLb_xz5Mlykcd1bBqDig.png
+Source: medium.com
+https://www.weareha.co.uk/wp-content/uploads/2022/06/devops-250x250-01.svg
+Source: www.weareha.co.uk

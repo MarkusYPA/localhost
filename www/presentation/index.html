@@ -1,0 +1,917 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>localhost — engineering review</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<link rel="stylesheet" href="deck.css?v=3"/>
+<style>
+  /* override: bullets must use position-based layout, not grid —
+     mixed text nodes + spans inside <li> get slotted as separate grid items */
+  .bullets li {
+    display: block !important;
+    position: relative !important;
+    padding-left: 40px !important;
+    grid-template-columns: none !important;
+    font-size: 24px;
+    line-height: 1.5;
+    color: var(--ink-2);
+  }
+  .bullets li::before {
+    content: "→";
+    color: var(--accent);
+    font-weight: 600;
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+</style>
+<style>
+  /* dark theme override */
+  body.theme-dark deck-stage > section { background: #0B1220 !important; color: #ECEFF5; }
+  body.theme-dark .slide { background: #0B1220 !important; color: #ECEFF5; }
+  body.theme-dark .slide::before {
+    background-image:
+      linear-gradient(to right, rgba(255,255,255,0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255,255,255,0.04) 1px, transparent 1px);
+  }
+  body.theme-dark .slide:not(.dark) .h-display,
+  body.theme-dark .slide:not(.dark) .h-section,
+  body.theme-dark .slide:not(.dark) .h-slide,
+  body.theme-dark .slide:not(.dark) .stat .v { color: #ECEFF5; }
+  body.theme-dark .slide:not(.dark) .body { color: rgba(255,255,255,0.78); }
+  body.theme-dark .slide:not(.dark) .slide-header,
+  body.theme-dark .slide:not(.dark) .slide-footer { color: rgba(255,255,255,0.55); border-color: rgba(255,255,255,0.18); }
+  body.theme-dark .slide:not(.dark) .panel,
+  body.theme-dark .slide:not(.dark) .spec-card,
+  body.theme-dark .slide:not(.dark) .flow-stage { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.16); }
+  body.theme-dark .slide:not(.dark) .panel.elevated { background: rgba(255,255,255,0.06); }
+  body.theme-dark .slide:not(.dark) .tbl th { color: rgba(255,255,255,0.6); border-color: rgba(255,255,255,0.4); }
+  body.theme-dark .slide:not(.dark) .tbl td { border-color: rgba(255,255,255,0.14); color: #ECEFF5; }
+  body.theme-dark .slide:not(.dark) .tbl tr.zebra td { background: rgba(255,255,255,0.04); }
+  body.theme-dark .slide:not(.dark) .crosshair::before, body.theme-dark .slide:not(.dark) .crosshair::after { background: rgba(255,255,255,0.35); }
+  body.theme-dark .slide:not(.dark) .slide-header .brand b { color: #ECEFF5; }
+  body.theme-dark .slide:not(.dark) .panel-num,
+  body.theme-dark .slide:not(.dark) .label,
+  body.theme-dark .slide:not(.dark) .stat .l,
+  body.theme-dark .slide:not(.dark) .muted { color: rgba(255,255,255,0.55); }
+  body.theme-dark .slide:not(.dark) .spec-card .desc { color: rgba(255,255,255,0.78); }
+  body.theme-dark .slide:not(.dark) .spec-card .footnote { color: rgba(255,255,255,0.55); border-color: rgba(255,255,255,0.16); }
+  body.theme-dark .slide:not(.dark) .bullets li { color: rgba(255,255,255,0.78); }
+
+  body.grid-off .slide::before { display: none; }
+
+  body.density-compact .slide { padding: 64px 80px; }
+  body.density-compact .h-display { font-size: 108px; }
+  body.density-compact .h-slide   { font-size: 48px; }
+</style>
+</head>
+<body>
+
+<template id="__bundler_thumbnail" data-bg-color="#F4F6FA">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect x="360" y="260" width="480" height="280" fill="#0B1220"/>
+    <rect x="388" y="288" width="10" height="10" fill="#1E5BFF"/>
+    <rect x="408" y="288" width="10" height="10" fill="#A6B0C2"/>
+    <rect x="428" y="288" width="10" height="10" fill="#A6B0C2"/>
+    <text x="388" y="380" font-family="ui-monospace, monospace" font-size="54" font-weight="600" fill="#ECEFF5">$ ./localhost</text>
+    <text x="388" y="450" font-family="ui-monospace, monospace" font-size="28" fill="#1E5BFF">→ kqueue() ready</text>
+    <rect x="388" y="490" width="16" height="28" fill="#1E5BFF"/>
+  </svg>
+</template>
+
+<deck-stage width="1920" height="1080">
+
+<!-- ============================================================
+     SLIDE 01 — TITLE
+     ============================================================ -->
+<section data-label="Title" class="slide s-title">
+  <span class="crosshair tl"></span><span class="crosshair tr"></span>
+  <span class="crosshair bl"></span><span class="crosshair br"></span>
+
+  <header class="slide-header">
+    <div class="brand"><span class="dot"></span><b>$ ./localhost</b></div>
+    <div class="right">
+      <span>ENGINEERING REVIEW</span>
+      <span>v1.0.0</span>
+      <span>2026-04</span>
+    </div>
+  </header>
+
+  <div class="slide-body">
+    <div>
+      <div class="eyebrow">PROJECT BRIEF · 01</div>
+      <h1 class="h-display">localhost<span class="accent" style="font-size:0.6em">_</span></h1>
+      <div class="body-lg" style="margin-top:32px;max-width:760px;color:var(--steel);font-weight:300">
+        A Rust HTTP/1.1 server built on raw sockets and<br/>
+        <span style="color:var(--ink);font-weight:500">kqueue</span> event multiplexing.
+      </div>
+      <div class="tag-strip">
+        <span class="chip"><span class="led"></span>RUST · 1.78</span>
+        <span class="chip"><span class="led"></span>SYSTEMS PROGRAMMING</span>
+        <span class="chip"><span class="led"></span>RFC 7230 · 7231 · 6265</span>
+        <span class="chip accent"><span class="led"></span>QA · CI/CD</span>
+      </div>
+    </div>
+
+    <div style="border:1px solid var(--rule);background:#fff;padding:36px;font-family:'JetBrains Mono',monospace">
+      <div style="display:flex;justify-content:space-between;font-size:14px;letter-spacing:0.2em;color:var(--steel-2);text-transform:uppercase;border-bottom:1px solid var(--rule);padding-bottom:12px;margin-bottom:18px">
+        <span>SESSION · #4127</span><span class="blink">▌</span>
+      </div>
+      <div style="font-size:18px;line-height:1.7;color:var(--ink)">
+<span style="color:var(--accent)">$</span> uname -a<br/>
+<span style="color:var(--steel)">Darwin host 25.3.0 arm64 RELEASE_ARM64</span><br/>
+<span style="color:var(--accent)">$</span> cargo run --release<br/>
+<span style="color:var(--steel)">  Compiling localhost v1.0.0</span><br/>
+<span style="color:var(--steel)">  Finished release [optimized] in 18.42s</span><br/>
+<span style="color:var(--steel)">  Running `target/release/localhost`</span><br/>
+<span style="color:var(--accent)">→</span> bound 0.0.0.0:8080<br/>
+<span style="color:var(--accent)">→</span> kqueue() initialized · max_conn=1024<br/>
+<span style="color:var(--accent)">→</span> ready · awaiting events<span class="blink">_</span>
+      </div>
+    </div>
+  </div>
+
+  <footer class="slide-footer">
+    <span>LOW-LEVEL NETWORKING · WEB PROTOCOLS · SYSTEMS DEV &amp; QA</span>
+    <span class="id">01 / 15</span>
+  </footer>
+</section>
+
+<!-- ============================================================
+     SLIDE 02 — ACADEMIC OBJECTIVES
+     ============================================================ -->
+<section data-label="Objectives" class="slide">
+  <span class="crosshair tl"></span><span class="crosshair tr"></span>
+  <span class="crosshair bl"></span><span class="crosshair br"></span>
+
+  <header class="slide-header">
+    <div class="brand"><span class="dot"></span><b>$ ./localhost</b></div>
+    <div class="right"><span>02 · OBJECTIVES</span><span>SCOPE.MD</span></div>
+  </header>
+
+  <div class="eyebrow">ACADEMIC OBJECTIVES</div>
+  <h2 class="h-slide" style="margin-bottom:16px">Three pillars,<br/>one binary.</h2>
+  <div class="body" style="max-width:1000px;margin-bottom:60px;color:var(--steel)">
+    Project goals derived from the 01Edu specification — graded against memory
+    safety, RFC compliance, and the rigor of our internal QA pipeline.
+  </div>
+
+  <div class="grid-3" style="flex:1">
+    <div class="spec-card">
+      <div class="row" style="justify-content:space-between">
+        <span class="num">PILLAR · 01</span>
+        <span class="num accent">●</span>
+      </div>
+      <div class="icon mono">{ }</div>
+      <div class="title">Systems Programming</div>
+      <div class="desc">
+        Low-level Rust development with direct system-call interfaces via
+        <span class="accent">libc</span>. Memory safety without sacrificing
+        socket-level control.
+      </div>
+      <div class="footnote">unsafe ≈ 0% · alloc minimised</div>
+    </div>
+
+    <div class="spec-card">
+      <div class="row" style="justify-content:space-between">
+        <span class="num">PILLAR · 02</span>
+        <span class="num accent">●</span>
+      </div>
+      <div class="icon mono">/&gt;</div>
+      <div class="title">Protocol Compliance</div>
+      <div class="desc">
+        RFC-compliant HTTP/1.1 parsing and socket-level TCP communication
+        using non-blocking primitives end-to-end.
+      </div>
+      <div class="footnote">RFC 7230 (Message Format and Routing) · RFC 7231 (Semantics and Content) · RFC 6265 (HTTP State Management Mechanism)</div>
+    </div>
+
+    <div class="spec-card">
+      <div class="row" style="justify-content:space-between">
+        <span class="num">PILLAR · 03</span>
+        <span class="num accent">●</span>
+      </div>
+      <div class="icon mono">✓</div>
+      <div class="title">QA Rigor</div>
+      <div class="desc">
+        Industrial testing methodology: PR-driven CI pipelines, peer-based
+        code reviews, and comprehensive testing.
+      </div>
+      <div class="footnote">CI · Clippy · reqwest harness</div>
+    </div>
+  </div>
+
+  <footer class="slide-footer">
+    <span>OBJECTIVES</span>
+    <span class="id">02 / 15</span>
+  </footer>
+</section>
+
+<!-- ============================================================
+     SLIDE 03 — TEAM COLLABORATION
+     ============================================================ -->
+<section data-label="Team" class="slide">
+  <span class="crosshair tl"></span><span class="crosshair tr"></span>
+  <span class="crosshair bl"></span><span class="crosshair br"></span>
+
+  <header class="slide-header">
+    <div class="brand"><span class="dot"></span><b>$ ./localhost</b></div>
+    <div class="right"><span>03 · TEAM</span><span>COLLAB.LOG</span></div>
+  </header>
+
+  <div class="eyebrow">TEAM COLLABORATION</div>
+  <h2 class="h-slide" style="margin-bottom:60px">Talk fast.<br/>Write it down anyway.</h2>
+
+  <div class="grid-2" style="flex:1;align-items:start">
+    <div class="panel elevated">
+      <div class="panel-head">
+        <div class="h-card">Communication Channels</div>
+        <span class="panel-num">A</span>
+      </div>
+      <div style="border-top:1px solid var(--rule);padding-top:20px">
+        <div class="readout"><span class="k">In-Person</span><span class="v">Home / classroom · default</span></div>
+        <div class="readout"><span class="k">WhatsApp</span><span class="v">Urgent pings · ad-hoc</span></div>
+        <div class="readout"><span class="k">GitHub</span><span class="v">Issues · PRs · reviews</span></div>
+        <div class="readout" style="border-bottom:none"><span class="k">Standup</span><span class="v">Daily · async-first</span></div>
+      </div>
+      <div style="margin-top:24px;font-size:14px;letter-spacing:0.2em;color:var(--steel-2);text-transform:uppercase">
+        Channels ranked by signal density
+      </div>
+    </div>
+
+    <div class="panel elevated">
+      <div class="panel-head">
+        <div class="h-card">Advantages &amp; Dynamics</div>
+        <span class="panel-num">B</span>
+      </div>
+      <ul class="bullets" style="border-top:1px solid var(--rule);padding-top:20px">
+        <li>Immediate resolution of architecture blockers via face-to-face whiteboarding.</li>
+        <li>Every informal decision is formalised into a GitHub Issue or PR comment within the same day.</li>
+        <li>Traceable development history: every merge is bound to a written rationale.</li>
+        <li>Pair-programming windows reserved for unsafe-block reviews and parser edge cases.</li>
+      </ul>
+    </div>
+  </div>
+
+  <footer class="slide-footer">
+    <span>TEAM</span>
+    <span class="id">03 / 15</span>
+  </footer>
+</section>
+
+<!-- ============================================================
+     SLIDE 04 — SECTION DIVIDER · ARCHITECTURE
+     ============================================================ -->
+<section data-label="Section · Architecture" data-om-validate="" class="slide dark">
+  <span class="crosshair tl"></span><span class="crosshair tr"></span>
+  <span class="crosshair bl"></span><span class="crosshair br"></span>
+
+  <header class="slide-header">
+    <div class="brand"><span class="dot"></span><b>$ ./localhost</b></div>
+    <div class="right"><span>PART · 01 / 02</span><span>ARCHITECTURE</span></div>
+  </header>
+
+  <div class="section-num">01</div>
+
+  <div style="flex:1;display:flex;flex-direction:column;justify-content:center;position:relative;z-index:1">
+    <div class="eyebrow" style="color:var(--accent)">PART 01 — ARCHITECTURE</div>
+    <h2 class="h-section" style="max-width:1400px">System architecture<br/><span style="color:var(--accent)">/&nbsp;</span>event-driven engine design.</h2>
+    <div class="body-lg" style="margin-top:48px;max-width:1000px;color:rgba(255,255,255,0.65)">
+      How a single-threaded loop can serve a thousand concurrent
+      connections without blocking — and why <span style="color:#fff">kqueue</span>
+      makes it cheap.
+    </div>
+
+    <div style="display:flex;gap:48px;margin-top:96px">
+      <div class="stat"><span class="v">01</span><span class="l">I/O Multiplexing</span></div>
+      <div class="stat"><span class="v">02</span><span class="l">Socket Lifecycle</span></div>
+      <div class="stat"><span class="v">03</span><span class="l">HTTP/1.1 Parsing</span></div>
+      <div class="stat"><span class="v">04</span><span class="l">Request Flow</span></div>
+      <div class="stat"><span class="v">05</span><span class="l">Documentation</span></div>
+    </div>
+  </div>
+
+  <footer class="slide-footer">
+    <span>SECTION OPENER</span>
+    <span class="id">04 / 15</span>
+  </footer>
+</section>
+
+<!-- ============================================================
+     SLIDE 05 — KQUEUE (animated diagram)
+     ============================================================ -->
+<section data-label="Kqueue" class="slide">
+  <span class="crosshair tl"></span><span class="crosshair tr"></span>
+  <span class="crosshair bl"></span><span class="crosshair br"></span>
+
+  <header class="slide-header">
+    <div class="brand"><span class="dot"></span><b>$ ./localhost</b></div>
+    <div class="right"><span>05 · ARCH / I-O</span><span>KQUEUE.RS</span></div>
+  </header>
+
+  <div style="display:grid;grid-template-columns:1.1fr 1fr;gap:64px;flex:1">
+    <div>
+      <div class="eyebrow">I/O MULTIPLEXING</div>
+      <h2 class="h-slide" style="margin-bottom:24px">One thread.<br/>One queue.<br/>Many sockets.</h2>
+      <div class="body" style="margin-bottom:36px;color:var(--steel)">
+        The core engine uses BSD <span class="accent" style="font-weight:600">kqueue</span> to monitor every
+        live file descriptor from a single dispatch loop.
+      </div>
+
+      <div class="col" style="gap:20px;border-top:1px solid var(--rule);padding-top:24px">
+        <div>
+          <div class="label" style="margin-bottom:6px">SCALABILITY</div>
+          <div class="body" style="font-size:22px">Avoids thread-per-connection overhead. One async loop, file-descriptor monitoring only.</div>
+        </div>
+        <div style="border-top:1px dashed var(--rule);padding-top:18px">
+          <div class="label" style="margin-bottom:6px">PERFORMANCE</div>
+          <div class="body" style="font-size:22px"><span class="mono accent">O(1)</span> retrieval — consistent latency under heavy load.</div>
+        </div>
+        <div style="border-top:1px dashed var(--rule);padding-top:18px">
+          <div class="label" style="margin-bottom:6px">EVENT FILTERS</div>
+          <div class="body" style="font-size:22px"><span class="mono">EVFILT_READ</span> for ingestion, <span class="mono">EVFILT_WRITE</span> for buffered delivery.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel elevated" style="display:flex;flex-direction:column;padding:28px">
+      <div class="panel-head">
+        <div class="label">LIVE SCHEMATIC · KQUEUE EVENT LOOP</div>
+        <span class="chip accent"><span class="led"></span>ANIMATED</span>
+      </div>
+      <div data-diagram="kqueue" style="flex:1;display:flex;align-items:center"></div>
+    </div>
+  </div>
+
+  <footer class="slide-footer">
+    <span>ARCHITECTURE / I-O</span>
+    <span class="id">05 / 15</span>
+  </footer>
+</section>
+
+<!-- ============================================================
+     SLIDE 06 — SOCKET MANAGEMENT
+     ============================================================ -->
+<section data-label="Sockets" class="slide">
+  <span class="crosshair tl"></span><span class="crosshair tr"></span>
+  <span class="crosshair bl"></span><span class="crosshair br"></span>
+
+  <header class="slide-header">
+    <div class="brand"><span class="dot"></span><b>$ ./localhost</b></div>
+    <div class="right"><span>06 · ARCH / NET</span><span>SOCKET.RS</span></div>
+  </header>
+
+  <div class="eyebrow">SOCKET MANAGEMENT</div>
+  <h2 class="h-slide" style="margin-bottom:60px">Non-blocking lifecycle &amp; state integrity.</h2>
+
+  <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:48px;flex:1">
+    <div class="panel elevated">
+      <div class="panel-head">
+        <div class="h-card">Implicit State Flow</div>
+        <span class="panel-num">FSM · 4 states</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin-top:24px;border:1px solid var(--rule)">
+        <div style="padding:28px 20px;border-right:1px solid var(--rule);position:relative">
+          <div class="label" style="margin-bottom:8px">S · 01</div>
+          <div style="font-size:24px;font-weight:600">ACCEPT</div>
+          <div class="body" style="font-size:16px;margin-top:8px">SYN → FD → register</div>
+        </div>
+        <div style="padding:28px 20px;border-right:1px solid var(--rule);background:var(--paper-2)">
+          <div class="label" style="margin-bottom:8px">S · 02</div>
+          <div style="font-size:24px;font-weight:600">INGEST</div>
+          <div class="body" style="font-size:16px;margin-top:8px">read() → buffer</div>
+        </div>
+        <div style="padding:28px 20px;border-right:1px solid var(--rule)">
+          <div class="label" style="margin-bottom:8px">S · 03</div>
+          <div style="font-size:24px;font-weight:600">PROCESS</div>
+          <div class="body" style="font-size:16px;margin-top:8px">parse → handler</div>
+        </div>
+        <div style="padding:28px 20px;background:var(--paper-2)">
+          <div class="label" style="margin-bottom:8px">S · 04</div>
+          <div style="font-size:24px;font-weight:600">DELIVER</div>
+          <div class="body" style="font-size:16px;margin-top:8px">write() → flush</div>
+        </div>
+      </div>
+      <div style="margin-top:28px;font-family:'JetBrains Mono',monospace;color:var(--steel);font-size:18px;line-height:1.7">
+<span class="muted">// partial I/O & protocol boundaries handled via kqueue filters</span><br/>
+<span style="color:var(--accent)">match</span> filter {<br/>
+&nbsp;&nbsp;<span style="color:var(--accent)">EVFILT_READ</span>  =&gt; conn.ingest()?,<br/>
+&nbsp;&nbsp;<span style="color:var(--accent)">EVFILT_WRITE</span> =&gt; conn.deliver()?,<br/>
+}
+      </div>
+    </div>
+
+    <div class="panel elevated">
+      <div class="panel-head">
+        <div class="h-card">Operational Guardrails</div>
+        <span class="panel-num">GUARD · 03</span>
+      </div>
+      <div class="col" style="gap:0;margin-top:8px">
+        <div class="readout">
+          <span class="k">SESSIONS</span>
+          <span class="v">UUID · persistent across<br/>transactions</span>
+        </div>
+        <div class="readout">
+          <span class="k">POOL CAP</span>
+          <span class="v">MAX_CONNECTIONS = 1024<br/><span class="muted">resource isolation</span></span>
+        </div>
+        <div class="readout">
+          <span class="k">REAPER</span>
+          <span class="v">Idle timeout · 30s<br/><span class="muted">proactive FD cleanup</span></span>
+        </div>
+        <div class="readout">
+          <span class="k">BACKPRESSURE</span>
+          <span class="v">Bounded write buffer · 64 KiB</span>
+        </div>
+        <div class="readout" style="border-bottom:none">
+          <span class="k">LIVENESS</span>
+          <span class="v">EVFILT_TIMER · keep-alive ticks</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="slide-footer">
+    <span>ARCHITECTURE / NET</span>
+    <span class="id">06 / 15</span>
+  </footer>
+</section>
+
+<!-- ============================================================
+     SLIDE 07 — HTTP/1.1 PROTOCOL
+     ============================================================ -->
+<section data-label="HTTP" class="slide">
+  <span class="crosshair tl"></span><span class="crosshair tr"></span>
+  <span class="crosshair bl"></span><span class="crosshair br"></span>
+
+  <header class="slide-header">
+    <div class="brand"><span class="dot"></span><b>$ ./localhost</b></div>
+    <div class="right"><span>07 · ARCH / HTTP</span><span>PARSER.RS</span></div>
+  </header>
+
+  <div class="eyebrow">WEB PROTOCOL IMPLEMENTATION</div>
+  <h2 class="h-slide" style="margin-bottom:60px">A handwritten HTTP/1.1 stack.</h2>
+
+  <div class="grid-2" style="flex:1">
+    <div class="panel elevated" style="display:flex;flex-direction:column">
+      <div class="panel-head">
+        <div class="h-card">Header & Request Line Processing</div>
+        <span class="panel-num">RFC 7230 · 7231</span>
+      </div>
+      
+      <div style="margin-top:24px;display:flex;flex-direction:column;gap:4px">
+        <div class="readout">
+          <span class="k">Request Line</span>
+          <span class="v">Directly extracts Method, Path, and Version. Built-in Query parsing.</span>
+        </div>
+        <div class="readout">
+          <span class="k">Headers</span>
+          <span class="v">Normalized to lowercase for case-insensitive HashMap lookups.</span>
+        </div>
+        <div class="readout">
+          <span class="k">Cookies</span>
+          <span class="v">Dedicated sub-parser for structured SID/State management.</span>
+        </div>
+        <div class="readout">
+          <span class="k">Body (CL)</span>
+          <span class="v">Static Content-Length tracking for deterministic framing.</span>
+        </div>
+        <div class="readout">
+          <span class="k">Body (CH)</span>
+          <span class="v">Dynamic Chunked decoding with hex-size state machine.</span>
+        </div>
+      </div>
+
+      <div class="tag-strip" style="margin-top:auto">
+        <span class="chip"><span class="led"></span>ZERO ALLOC ON HOT PATH</span>
+        <span class="chip"><span class="led"></span>REJECTS DUAL CL+TE</span>
+        <span class="chip accent"><span class="led"></span>STRICT RFC COMPLIANCE</span>
+      </div>
+
+    </div>
+
+    <div class="panel elevated" style="display:flex;flex-direction:column">
+      <div class="panel-head">
+        <div class="h-card">Dynamic Routing</div>
+        <span class="panel-num">VHOST · CGI · SESSIONS</span>
+      </div>
+      <div class="body" style="margin-top:8px">
+        The <span class="mono accent" style="font-weight:600">Host</span> header maps inbound traffic to a virtual server.
+        Each vhost binds its own document root, error pages and CGI handlers.
+      </div>
+
+      <div style="margin-top:24px;border:1px solid var(--rule);background:#fff">
+        <div style="display:grid;grid-template-columns:120px 1fr;border-bottom:1px solid var(--rule)">
+          <div style="padding:14px 18px;background:var(--paper-2);font-size:14px;letter-spacing:0.2em;color:var(--steel-2);text-transform:uppercase">HOST</div>
+          <div style="padding:14px 18px;font-family:'JetBrains Mono',monospace;font-size:18px">api.localhost  →  vhost: API · :8080</div>
+        </div>
+        <div style="display:grid;grid-template-columns:120px 1fr;border-bottom:1px solid var(--rule)">
+          <div style="padding:14px 18px;background:var(--paper-2);font-size:14px;letter-spacing:0.2em;color:var(--steel-2);text-transform:uppercase">CGI</div>
+          <div style="padding:14px 18px;font-family:'JetBrains Mono',monospace;font-size:18px">/cgi-bin/*  →  python3 / bash</div>
+        </div>
+        <div style="display:grid;grid-template-columns:120px 1fr;border-bottom:1px solid var(--rule)">
+          <div style="padding:14px 18px;background:var(--paper-2);font-size:14px;letter-spacing:0.2em;color:var(--steel-2);text-transform:uppercase">STATIC</div>
+          <div style="padding:14px 18px;font-family:'JetBrains Mono',monospace;font-size:18px">/* → fs::read · MIME by ext</div>
+        </div>
+        <div style="display:grid;grid-template-columns:120px 1fr">
+          <div style="padding:14px 18px;background:var(--paper-2);font-size:14px;letter-spacing:0.2em;color:var(--steel-2);text-transform:uppercase">SESSION</div>
+          <div style="padding:14px 18px;font-family:'JetBrains Mono',monospace;font-size:18px">Set-Cookie: SID=&lt;uuid&gt;</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="slide-footer">
+    <span>ARCHITECTURE / HTTP</span>
+    <span class="id">07 / 15</span>
+  </footer>
+</section>
+
+<!-- ============================================================
+     SLIDE 08 — REQUEST FLOW (animated)
+     ============================================================ -->
+<section data-label="Request flow" class="slide">
+  <span class="crosshair tl"></span><span class="crosshair tr"></span>
+  <span class="crosshair bl"></span><span class="crosshair br"></span>
+
+  <header class="slide-header">
+    <div class="brand"><span class="dot"></span><b>$ ./localhost</b></div>
+    <div class="right"><span>08 · ARCH / FLOW</span><span>FLOW.RS</span></div>
+  </header>
+
+  <div class="eyebrow">REQUEST FLOW MECHANICS</div>
+  <h2 class="h-slide" style="margin-bottom:24px">From SYN to 200 OK.</h2>
+  <div class="body" style="max-width:1100px;margin-bottom:48px;color:var(--steel)">
+    Every request walks the same five-stage pipeline. Each stage yields control
+    to the kqueue loop the moment a syscall would block.
+  </div>
+
+  <div class="panel elevated" style="flex:1;display:flex;flex-direction:column">
+    <div class="panel-head">
+      <div class="label">REQ LIFECYCLE · LIVE TIMELINE</div>
+      <span class="chip accent"><span class="led"></span>ANIMATED</span>
+    </div>
+    <div data-diagram="request-flow" style="flex:1;display:flex;align-items:center"></div>
+  </div>
+
+  <footer class="slide-footer">
+    <span>ARCHITECTURE / FLOW</span>
+    <span class="id">08 / 15</span>
+  </footer>
+</section>
+
+<!-- ============================================================
+     SLIDE 09 — REQUIREMENTS & DOCUMENTATION
+     ============================================================ -->
+<section data-label="Docs" class="slide">
+  <span class="crosshair tl"></span><span class="crosshair tr"></span>
+  <span class="crosshair bl"></span><span class="crosshair br"></span>
+
+  <header class="slide-header">
+    <div class="brand"><span class="dot"></span><b>$ ./localhost</b></div>
+    <div class="right"><span>09 · DOCS</span><span>README.MD</span></div>
+  </header>
+
+  <div class="eyebrow">REQUIREMENTS &amp; DOCUMENTATION</div>
+  <h2 class="h-slide" style="margin-bottom:60px">Mapping goals to implementation.</h2>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:48px;flex:1">
+    <div class="panel elevated">
+      <div class="panel-head">
+        <div class="h-card">Source of Truth</div>
+        <span class="panel-num">A</span>
+      </div>
+      <ul class="bullets" style="margin-top:8px;margin-bottom:20px">
+        <li>Derived from the <span class="accent" style="font-weight:600">01Edu spec</span> and its audit criteria.</li>
+        <li><span class="mono">README.md</span> — primary technical manual.</li>
+        <li>Audit criteria verified on PR creation: fail one, fail the build.</li>
+      </ul>
+      <div style="padding:16px 18px;border:1px solid var(--rule);background:#fff;font-family:'JetBrains Mono',monospace;font-size:14px;line-height:1.55">
+<span class="muted">localhost/</span> &nbsp; <span class="muted">// repo root</span><br/>
+├── README.md &nbsp;&nbsp;&nbsp;&nbsp; <span class="muted">// canonical manual</span><br/>
+├── docs/ functionality.md · testing.md · audit.md<br/>
+└── src/ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="muted">// inline rustdoc</span>
+      </div>
+    </div>
+
+    <div class="panel elevated">
+      <div class="panel-head">
+        <div class="h-card">Document Structure</div>
+        <span class="panel-num">RELIABILITY · COMPLIANCE</span>
+      </div>
+      <div class="col" style="gap:0">
+        <div class="readout"><span class="k">README.MD</span><span class="v">Canonical manual & architecture overview</span></div>
+        <div class="readout"><span class="k">FUNCTIONALITY.MD</span><span class="v">Feature list · config schema · usage</span></div>
+        <div class="readout"><span class="k">TESTING.MD</span><span class="v">ASan · Go integration · Failure modes</span></div>
+        <div class="readout"><span class="k">AUDIT.MD</span><span class="v">01Edu specification & audit criteria</span></div>
+      </div>
+      <div style="margin-top:28px;font-size:18px;color:var(--steel);line-height:1.55">
+        Docs act as the <span class="accent" style="font-weight:600">benchmark</span> — every feature
+        (CGI, sessions, kqueue) is verified against the 01Edu spec via the
+        protocols defined in <span class="mono">docs/testing.md</span>.
+      </div>
+    </div>
+  </div>
+
+  <footer class="slide-footer">
+    <span>DOCUMENTATION</span>
+    <span class="id">09 / 15</span>
+  </footer>
+</section>
+
+<!-- ============================================================
+     SLIDE 10 — SECTION DIVIDER · TESTING
+     ============================================================ -->
+<section data-label="Section · Testing" data-om-validate="" class="slide dark">
+  <span class="crosshair tl"></span><span class="crosshair tr"></span>
+  <span class="crosshair bl"></span><span class="crosshair br"></span>
+
+  <header class="slide-header">
+    <div class="brand"><span class="dot"></span><b>$ ./localhost</b></div>
+    <div class="right"><span>PART · 02 / 02</span><span>TESTING</span></div>
+  </header>
+
+  <div class="section-num">02</div>
+
+  <div style="flex:1;display:flex;flex-direction:column;justify-content:center;position:relative;z-index:1">
+    <div class="eyebrow" style="color:var(--accent)">PART 02 — TESTING &amp; VERIFICATION</div>
+    <h2 class="h-section" style="max-width:1500px">Testing &amp; verification<br/><span style="color:var(--accent)">/&nbsp;</span>ensuring stability in lower layers.</h2>
+    <div class="body-lg" style="margin-top:48px;max-width:1100px;color:rgba(255,255,255,0.65)">
+      Where systems-level bugs hide, and how we drag them into the light
+      on every push.
+    </div>
+
+    <div style="display:flex;gap:64px;margin-top:96px">
+      <div class="stat"><span class="v">04</span><span class="l">Test Layers</span></div>
+      <div class="stat"><span class="v">100<span style="color:var(--accent)">%</span></span><span class="l">CI Coverage</span></div>
+      <div class="stat"><span class="v">≤15s</span><span class="l">Median Pipeline</span></div>
+      <div class="stat"><span class="v">0</span><span class="l">Manual Steps to Ship</span></div>
+    </div>
+  </div>
+
+  <footer class="slide-footer">
+    <span>SECTION OPENER</span>
+    <span class="id">10 / 15</span>
+  </footer>
+</section>
+
+<!-- ============================================================
+     SLIDE 11 — MULTI-TIERED TESTING
+     ============================================================ -->
+<section data-label="Testing strategy" class="slide">
+  <span class="crosshair tl"></span><span class="crosshair tr"></span>
+  <span class="crosshair bl"></span><span class="crosshair br"></span>
+
+  <header class="slide-header">
+    <div class="brand"><span class="dot"></span><b>$ ./localhost</b></div>
+    <div class="right"><span>11 · QA / STRATEGY</span><span>TESTING.MD</span></div>
+  </header>
+
+  <div class="eyebrow">MULTI-TIERED TESTING STRATEGY</div>
+  <h2 class="h-slide" style="margin-bottom:60px">Four layers,<br/>one verdict.</h2>
+
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:24px;flex:1">
+    <div class="spec-card" style="min-height:auto">
+      <div class="row" style="justify-content:space-between"><span class="num">L · 01</span><span class="num accent">PEER</span></div>
+      <div class="title" style="font-size:22px">Mandatory<br/>Peer Reviews</div>
+      <div class="desc">Memory safety, logic flow, error handling — every PR.</div>
+      <div class="footnote">≥1 reviewer · blocking</div>
+    </div>
+    <div class="spec-card" style="min-height:auto">
+      <div class="row" style="justify-content:space-between"><span class="num">L · 02</span><span class="num accent">UNIT</span></div>
+      <div class="title" style="font-size:22px">Automated<br/>Unit Tests</div>
+      <div class="desc">HTTP parser · URI builder · session manager — isolated, deterministic.</div>
+      <div class="footnote">cargo test · per-push</div>
+    </div>
+    <div class="spec-card" style="min-height:auto">
+      <div class="row" style="justify-content:space-between"><span class="num">L · 03</span><span class="num accent">MANUAL</span></div>
+      <div class="title" style="font-size:22px">Manual<br/>Scenarios</div>
+      <div class="desc">Stress tests under sustained load and memory-leak monitoring across long-running sessions.</div>
+      <div class="footnote">siege · leaks · per milestone</div>
+    </div>
+    <div class="spec-card" style="min-height:auto">
+      <div class="row" style="justify-content:space-between"><span class="num">L · 04</span><span class="num accent">E2E</span></div>
+      <div class="title" style="font-size:22px">Integration<br/>Tests</div>
+      <div class="desc">End-to-end cycles via <span class="mono">reqwest</span> against realistic HTTP traffic.</div>
+      <div class="footnote">harness · per push</div>
+    </div>
+  </div>
+
+  <div style="margin-top:48px;display:flex;gap:32px;align-items:center;border-top:1px solid var(--rule);padding-top:28px">
+    <span class="label">VERDICT</span>
+    <span class="body" style="color:var(--steel)">A change is only <span class="accent" style="font-weight:600">mergeable</span> when all four layers report green.</span>
+  </div>
+
+  <footer class="slide-footer">
+    <span>QA / STRATEGY</span>
+    <span class="id">11 / 15</span>
+  </footer>
+</section>
+
+<!-- ============================================================
+     SLIDE 12 — GITHUB ACTIONS PIPELINE (animated)
+     ============================================================ -->
+<section data-label="CI pipeline" class="slide">
+  <span class="crosshair tl"></span><span class="crosshair tr"></span>
+  <span class="crosshair bl"></span><span class="crosshair br"></span>
+
+  <header class="slide-header">
+    <div class="brand"><span class="dot"></span><b>$ ./localhost</b></div>
+    <div class="right"><span>12 · QA / CI</span><span>CI.YML</span></div>
+  </header>
+
+  <div class="eyebrow">GITHUB ACTIONS PIPELINE</div>
+  <h2 class="h-slide" style="margin-bottom:24px">Every commit is a candidate.</h2>
+  <div class="body" style="max-width:1100px;margin-bottom:36px;color:var(--steel)">
+    Continuous Integration validates each push automatically — build, lint,
+    regression, integration. No green badge, no merge.
+  </div>
+
+  <div class="panel elevated" style="margin-bottom:32px">
+    <div class="panel-head">
+      <div class="label">WORKFLOW · LIVE</div>
+      <span class="chip accent"><span class="led"></span>ANIMATED</span>
+    </div>
+    <div data-diagram="ci"></div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px">
+    <div class="panel" style="padding:24px">
+      <div class="label" style="margin-bottom:6px">JOB · 01</div>
+      <div class="h-card" style="font-size:22px;margin-bottom:8px">Build Validation</div>
+      <div class="body" style="font-size:18px">Compiles against the Rust toolchain on the target environment.</div>
+    </div>
+    <div class="panel" style="padding:24px">
+      <div class="label" style="margin-bottom:6px">JOB · 02</div>
+      <div class="h-card" style="font-size:22px;margin-bottom:8px">Static Analysis</div>
+      <div class="body" style="font-size:18px"><span class="mono accent">clippy</span> enforces idiomatic Rust and catches lint-level errors.</div>
+    </div>
+    <div class="panel" style="padding:24px">
+      <div class="label" style="margin-bottom:6px">JOB · 03</div>
+      <div class="h-card" style="font-size:22px;margin-bottom:8px">Regression Suite</div>
+      <div class="body" style="font-size:18px">Integration tests run end-to-end so logic stays intact across commits.</div>
+    </div>
+  </div>
+
+  <footer class="slide-footer">
+    <span>QA / CI</span>
+    <span class="id">12 / 15</span>
+  </footer>
+</section>
+
+<!-- ============================================================
+     SLIDE 13 — TESTING FRAMEWORK SUMMARY (table)
+     ============================================================ -->
+<section data-label="Testing summary" class="slide">
+  <span class="crosshair tl"></span><span class="crosshair tr"></span>
+  <span class="crosshair bl"></span><span class="crosshair br"></span>
+
+  <header class="slide-header">
+    <div class="brand"><span class="dot"></span><b>$ ./localhost</b></div>
+    <div class="right"><span>13 · QA / SUMMARY</span><span>MATRIX.TBL</span></div>
+  </header>
+
+  <div class="eyebrow">TESTING FRAMEWORK SUMMARY</div>
+  <h2 class="h-slide" style="margin-bottom:60px">The matrix at a glance.</h2>
+
+  <div class="panel elevated" style="flex:1">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th style="width:8%">#</th>
+          <th style="width:24%">Test Layer</th>
+          <th style="width:30%">Primary Focus</th>
+          <th style="width:18%">Frequency</th>
+          <th style="width:20%">Automation Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="mono muted">01</td>
+          <td><strong>Unit Tests</strong></td>
+          <td>Logic &amp; parsers</td>
+          <td class="mono">Per PR</td>
+          <td><span class="pill full"><span class="led"></span>FULLY AUTOMATED</span></td>
+        </tr>
+        <tr class="zebra">
+          <td class="mono muted">02</td>
+          <td><strong>Integration Tests</strong></td>
+          <td>Server scenarios · reqwest harness</td>
+          <td class="mono">Per PR</td>
+          <td><span class="pill full"><span class="led"></span>FULLY AUTOMATED</span></td>
+        </tr>
+        <tr>
+          <td class="mono muted">03</td>
+          <td><strong>Manual Tests</strong></td>
+          <td>Feature validation · edge cases</td>
+          <td class="mono">Per feature</td>
+          <td><span class="pill human"><span class="led"></span>HUMAN-LED</span></td>
+        </tr>
+        <tr class="zebra">
+          <td class="mono muted">04</td>
+          <td><strong>Stress Tests</strong></td>
+          <td>Load · kqueue saturation</td>
+          <td class="mono">Milestones</td>
+          <td><span class="pill semi"><span class="led"></span>SEMI-AUTOMATED</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div style="display:flex;gap:48px;margin-top:48px;padding-top:28px;border-top:1px solid var(--rule)">
+      <div class="stat"><span class="v" style="font-size:64px">2 / 4</span><span class="l">Fully Automated</span></div>
+      <div class="stat"><span class="v" style="font-size:64px">1 / 4</span><span class="l">Semi-Automated</span></div>
+      <div class="stat"><span class="v" style="font-size:64px">1 / 4</span><span class="l">Human-Led</span></div>
+      <div class="stat"><span class="v" style="font-size:64px">100<span class="accent">%</span></span><span class="l">Coverage Across Layers</span></div>
+    </div>
+  </div>
+
+  <footer class="slide-footer">
+    <span>QA / SUMMARY</span>
+    <span class="id">13 / 15</span>
+  </footer>
+</section>
+
+<!-- ============================================================
+     SLIDE 14 — Q&A
+     ============================================================ -->
+<section data-label="Q and A" class="slide dark">
+  <span class="crosshair tl"></span><span class="crosshair tr"></span>
+  <span class="crosshair bl"></span><span class="crosshair br"></span>
+
+  <header class="slide-header">
+    <div class="brand"><span class="dot"></span><b>$ ./localhost</b></div>
+    <div class="right"><span>14 · OUTRO</span><span>EOF</span></div>
+  </header>
+
+  <div style="flex:1;display:grid;grid-template-columns:1.2fr 1fr;gap:96px;align-items:center;position:relative;z-index:1">
+    <div>
+      <div class="eyebrow" style="color:var(--accent)">FLOOR IS OPEN</div>
+      <h1 class="h-display" style="font-size:160px">Q&nbsp;&amp;&nbsp;A<span class="blink" style="color:var(--accent)">_</span></h1>
+      <div class="body-lg" style="margin-top:24px;color:rgba(255,255,255,0.65);max-width:760px">
+        Technical discussion on implementation details — kqueue, parser
+        edge cases, CGI security, the CI matrix.
+      </div>
+
+      <div style="margin-top:48px;border-top:1px solid rgba(255,255,255,0.18);padding-top:24px">
+        <div class="label" style="color:rgba(255,255,255,0.55);margin-bottom:18px">CONTRIBUTORS · git shortlog -sn</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px 32px;font-family:'JetBrains Mono',monospace;color:#fff">
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <div style="display:flex;align-items:baseline;gap:14px">
+              <span style="color:rgba(255,255,255,0.4);font-size:14px;letter-spacing:0.18em">01</span>
+              <span style="font-size:24px;font-weight:600">Markus Amberla</span>
+            </div>
+            <span style="color:var(--accent);font-size:18px;padding-left:32px">@MarkusYPA</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <div style="display:flex;align-items:baseline;gap:14px">
+              <span style="color:rgba(255,255,255,0.4);font-size:14px;letter-spacing:0.18em">02</span>
+              <span style="font-size:24px;font-weight:600">Oleg Balandin</span>
+            </div>
+            <span style="color:var(--accent);font-size:18px;padding-left:32px">@olegamobile</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.03);padding:36px;font-family:'JetBrains Mono',monospace">
+      <div style="display:flex;justify-content:space-between;font-size:14px;letter-spacing:0.2em;color:rgba(255,255,255,0.5);text-transform:uppercase;border-bottom:1px solid rgba(255,255,255,0.18);padding-bottom:14px;margin-bottom:20px">
+        <span>REPOSITORY</span><span>PUBLIC</span>
+      </div>
+      <div style="font-size:24px;line-height:1.7;color:#fff;word-break:break-all">
+        <span style="color:var(--accent)">$</span> git remote -v<br/>
+        <span style="color:rgba(255,255,255,0.55);font-size:18px">origin&nbsp;&nbsp;</span><br/>
+        <span style="color:#fff;font-size:22px">github.com/</span><br/>
+        <span style="color:var(--accent);font-size:28px;font-weight:600">MarkusYPA/localhost</span>
+      </div>
+      <div style="border-top:1px solid rgba(255,255,255,0.18);margin-top:24px;padding-top:18px;display:flex;justify-content:space-between;font-size:14px;letter-spacing:0.2em;color:rgba(255,255,255,0.5);text-transform:uppercase">
+        <span>BRANCH · main</span>
+        <span class="blink" style="color:var(--accent)">●</span>
+      </div>
+    </div>
+  </div>
+
+  <footer class="slide-footer">
+    <span>THANK YOU</span>
+    <span class="id">14 / 15</span>
+  </footer>
+</section>
+
+
+</deck-stage>
+
+<!-- tweaks mount -->
+<div id="tweaks-root"></div>
+
+<!-- React + Babel -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script src="deck-stage.js"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="diagrams.jsx"></script>
+<script type="text/babel" src="tweaks-app.jsx"></script>
+
+</body>
+</html>

@@ -87,6 +87,19 @@
           }
         }
       ]
+    },
+    {
+      "server_name": "presentation",
+      "host": "127.0.0.1",
+      "ports": [7777],
+      "routes": [
+        {
+          "path": "/",
+          "methods": ["GET"],
+          "root": "./www/presentation",
+          "index": "index.html"
+        }
+      ]
     }
   ]
 }
