@@ -27,7 +27,7 @@ Communication Channels:
 
 Advantages & Dynamics:
   • Immediate resolution of architecture blockers through face-to-face discussion
-  • Informal decisions are always formalized into GitHub issues to ensure a traceable development history
+  • Informal decisions are formalized into GitHub issues to ensure a traceable development history
 
 # slide 4 - section 1
 System Architecture
@@ -74,13 +74,13 @@ REQUIREMENTS & DOCUMENTATION
 Mapping Goals to Implementation
 
 Source of Truth:
-  • Derived from 01Edu platform specs and technical audit criteria.
-  • README.md serves as the primary technical manual for features and usage.
+  • 01Edu platform specs and technical audit criteria
+  • README.md serves as the primary technical manual for features and usage
 
 Document Structure:
-  • Dedicated documentation for "Functionality" and "Testing Protocols".
-  • Inline Rust comments clarifying complex non-blocking state transitions.
-  • Docs act as the benchmark for verifying that features (CGI, sessions, kqueue) meet RFC standards.
+  • Dedicated documentation for "Functionality" and "Testing Protocols"
+  • Inline Rust comments clarifying complex non-blocking state transitions
+  • Docs act as the benchmark for verifying that features (CGI, sessions, kqueue) meet RFC standards
 
 # slide 10 - section 2
 Testing & Verification
